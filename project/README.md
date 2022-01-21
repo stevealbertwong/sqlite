@@ -1,6 +1,3 @@
-# 15-445 Database Systems
-# SQLite Project Source Code
-
 ### Build
 ```
 mkdir build
