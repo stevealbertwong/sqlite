@@ -44,6 +44,11 @@ public:
   inline void SetPersistentLSN(lsn_t lsn) { persistent_lsn_ = lsn; }
   inline char *GetLogBuffer() { return log_buffer_; }
 
+
+
+
+
+
 private:
   // TODO: you may add your own member variables
   // also remember to change constructor accordingly

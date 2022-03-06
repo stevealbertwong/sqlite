@@ -1,12 +1,3 @@
-/*
- * extendible_hash.h : implementation of in-memory hash table using extendible
- * hashing
- *
- * Functionality: The buffer pool manager must maintain a page table to be able
- * to quickly map a PageId to its corresponding memory location; or alternately
- * report that the PageId does not match any currently-buffered page.
- */
-
 #pragma once
 
 #include <cstdlib>
@@ -19,6 +10,21 @@ namespace cmudb {
 
 template <typename K, typename V>
 class ExtendibleHash : public HashTable<K, V> {
+
+struct Bucket {
+  
+  // Bucket() = default;
+  // explicit Bucket(size_t i, int d) : id(i), depth(d) {}
+  
+  Bucket(int depth) : local_depth(depth) {}  
+  int id;
+  int local_depth;
+  std::map<K, V> map_of_kv;
+}
+
+
+
+
 public:
   // constructor
   ExtendibleHash(size_t size);
@@ -34,6 +40,12 @@ public:
   void Insert(const K &key, const V &value) override;
 
 private:
-  // add your own member variables here
+
+  int global_depth;
+  const size_t MAX_BUCKET_SIZE;
+  // size_t bucket_size;
+  std::vector<std::shared_ptr<Bucket>> global_directory; // vertically split 0,1s 
+
+
 };
 } // namespace cmudb

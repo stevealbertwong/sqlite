@@ -12,11 +12,31 @@ namespace cmudb {
  * manager wants to force flush (it only happens when the flushed page has a
  * larger LSN than persistent LSN)
  */
-void LogManager::RunFlushThread() {}
+void LogManager::RunFlushThread() {
+
+ 
+  // 1. unblock() if signaled or timeout 
+
+
+  // 2. w() log buffer to disk
+
+
+
+}
+
+
 /*
  * Stop and join the flush thread, set ENABLE_LOGGING = false
  */
-void LogManager::StopFlushThread() {}
+void LogManager::StopFlushThread() {
+
+
+
+
+
+}
+
+
 
 /*
  * append a log record into log buffer
@@ -39,6 +59,19 @@ void LogManager::StopFlushThread() {}
  *
  */
 lsn_t LogManager::AppendLogRecord(LogRecord &log_record) {
+
+  // 1. fill in row's content
+
+
+
+  // 2. append row's header to WAL
+
+
+
+  // 3. append row's content to WAL
+  // 4 ways of constructing "RED WORD" rows in WAL
+
+
 
   return INVALID_LSN;
 }

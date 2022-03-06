@@ -1,12 +1,3 @@
-/**
- * lru_replacer.h
- *
- * Functionality: The buffer pool manager must maintain a LRU list to collect
- * all the pages that are unpinned and ready to be swapped. The simplest way to
- * implement LRU is a FIFO queue, but remember to dequeue or enqueue pages when
- * a page changes from unpinned to pinned, or vice-versa.
- */
-
 #pragma once
 
 #include "buffer/replacer.h"
@@ -29,8 +20,23 @@ public:
 
   size_t Size();
 
-private:
-  // add your member variables here
+
+
+
+private:  
+
+  /* 
+  unordered_map == for quick lookup of linked list
+  
+  k/T: page's ptr, v: iterator of linked list
+  
+  unordered_map == hash map 
+  iterator == ptr to page's ptr == addr of linked list node that stores page's ptr
+  */
+  std::list<T> linked_list_of_pageptr;
+  std::unordered_map<T, std::list<T>::iterator> map_of_pageptr_iter; 
+
+  
 };
 
 } // namespace cmudb

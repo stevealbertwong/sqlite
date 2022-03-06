@@ -67,6 +67,13 @@ private:
                     BufferPoolManager *buffer_pool_manager);
   void CopyFirstFrom(const MappingType &pair, int parent_index,
                      BufferPoolManager *buffer_pool_manager);
+  
+  
+  /*
+  MappingType == std::pair<KeyType, ValueType>
+  
+  ValueType == page id == pointing at child page
+  */
   MappingType array[0];
 };
 } // namespace cmudb

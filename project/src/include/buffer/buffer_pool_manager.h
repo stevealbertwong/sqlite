@@ -1,10 +1,4 @@
-/*
- * buffer_pool_manager.h
- *
- * Functionality: The simplified Buffer Manager interface allows a client to
- * new/delete pages on disk, to read a disk page into the buffer pool and pin
- * it, also to unpin a page in the buffer pool.
- */
+
 
 #pragma once
 #include <list>
@@ -39,9 +33,9 @@ private:
   Page *pages_;      // array of pages
   DiskManager *disk_manager_;
   LogManager *log_manager_;
-  HashTable<page_id_t, Page *> *page_table_; // to keep track of pages
-  Replacer<Page *> *replacer_;   // to find an unpinned page for replacement
-  std::list<Page *> *free_list_; // to find a free page for replacement
+  HashTable<page_id_t, Page *> *page_table_; // all pages w content in RAM
+  Replacer<Page *> *lru_replacer_;   // lru == only unpinned of all pages 
+  std::list<Page *> *free_list_; // all free pages in RAM w/o content == not in lru or page_table 
   std::mutex latch_;             // to protect shared data structure
 };
 } // namespace cmudb

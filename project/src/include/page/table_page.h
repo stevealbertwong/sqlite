@@ -71,6 +71,10 @@ public:
   bool GetFirstTupleRid(RID &first_rid);
   bool GetNextTupleRid(const RID &cur_rid, RID &next_rid);
 
+
+
+
+
 private:
   /**
    * helper functions
