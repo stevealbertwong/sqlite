@@ -1,7 +1,3 @@
-/**
- * transaction.h
- */
-
 #pragma once
 
 #include <atomic>
@@ -72,9 +68,10 @@ public:
   inline std::shared_ptr<std::deque<WriteRecord>> GetWriteSet() {
     return write_set_;
   }
-
+  
   inline std::shared_ptr<std::deque<Page *>> GetPageSet() { return page_set_; }
 
+  // for latching, register pages this txn touches
   inline void AddIntoPageSet(Page *page) { page_set_->push_back(page); }
 
   inline std::shared_ptr<std::unordered_set<page_id_t>> GetDeletedPageSet() {
@@ -101,6 +98,10 @@ public:
 
   inline void SetPrevLSN(lsn_t prev_lsn) { prev_lsn_ = prev_lsn; }
 
+
+
+
+
 private:
   TransactionState state_;
   // thread id, single-threaded transactions
@@ -112,13 +113,18 @@ private:
   // prev lsn
   lsn_t prev_lsn_;
 
-  // Below are used by concurrent index
-  // this deque contains page pointer that was latche during index operation
+  
+  /* for concurrent index */
+  // for unlatching all latched pages when done insert/delete
+  // pageset == for latching, all pages this txn touches
   std::shared_ptr<std::deque<Page *>> page_set_;
+
   // this set contains page_id that was deleted during index operation
   std::shared_ptr<std::unordered_set<page_id_t>> deleted_page_set_;
 
-  // Below are used by lock manager
+
+
+  /* for lock manager */ 
   // this set contains rid of shared-locked tuples by this transaction
   std::shared_ptr<std::unordered_set<RID>> shared_lock_set_;
   // this set contains rid of exclusive-locked tuples by this transaction

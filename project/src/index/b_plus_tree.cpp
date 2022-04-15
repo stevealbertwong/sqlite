@@ -1,20 +1,29 @@
 /**
  * b_plus_tree.cpp
  * 
+ * 1. if conditions for 14 cases 
+ * 2. abstract name for each case's combined leaf/internal nodes changes
+ * (actual leaf/internal nodes changes are in b_plus_tree_leaf_page.cpp)
+ * 
  * reference: 
+ * https://www.cs.usfca.edu/~galles/visualization/BPlusTree.html 
  * https://www.programiz.com/dsa/insertion-on-a-b-plus-tree 
  * https://www.programiz.com/dsa/deletion-from-a-b-plus-tree
  * 
  * 
- * 3 APIs:
+ * implementation of 3 APIs:
  * search()
  * insert()
  * remove()
  * 
- * 
- * 
- * 
- * 
+ * internal pages == direct search 
+ * leaf pages == contain actual data
+ * (1) We only support unique key
+ * (2) support insert & remove
+ * (3) The structure should shrink and grow dynamically
+ * (4) Implement index iterator for range scan
+ 
+
 
 B+ tree of degree m:
 
@@ -22,6 +31,20 @@ A node can have a maximum of m children. (i.e. 3)
 A node can contain a maximum of m - 1 keys. (i.e. 2) == if less, then underflow
 A node should have a minimum of ⌈m/2⌉ children. (i.e. 2) 
 A node (except root node) should contain a minimum of ⌈m/2⌉ - 1 keys. (i.e. 1)
+
+
+latching grabbing:
+safe == no split, merge or redistribute 
+search n insert n delete have their own version of latch grapping
+delete == search version up to down + delete version down to up
+delete == search version up to down + delete version down to up
+
+
+Q&A:
+why leaf / internal node is big enough to get a page ??
+rationale for existence of a class n func ??
+
+
  * 
  */
 #include <iostream>
@@ -42,13 +65,6 @@ BPLUSTREE_TYPE::BPlusTree(const std::string &name,
                                 page_id_t root_page_id)
     : index_name_(name), root_page_id_(root_page_id),
       buffer_pool_manager_(buffer_pool_manager), comparator_(comparator) {}
-
-
-/*
- * Helper function to decide whether current b+tree is empty
- */
-INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::IsEmpty() const { return true; }
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -84,6 +100,86 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key,
   return false;
 }
 
+/*
+ * traverse b+tree using key
+ * 
+ * latch grabbing ORDERING: 
+ * - fetch() -> latch() -> r() or u() -> unlatch() -> unpin()
+ * - child latch() -> parent unlatch()
+ *
+ * ORDERING: 
+ * - fetch() -> latch() -> r() or u() -> unlatch() -> unpin()
+ * - child latch() -> parent unlatch()
+ * 
+ * 
+ * NOTE: 
+ * leftMost == find the left most leaf page == for iterator 
+ * op == 3 types latch coupling for search, insert/delete, iterate
+ * txn == for concurrent btree r() w() since parent of all btrees objects
+ * safe == no split, merge, rebalance == current size vs max Size
+ * unpin == slowly flush to disk
+ * unlatch == txn can r() or u() page
+ * typecast to BPlusTreePage == 
+ * 
+ * while loop but not recursion ?? 
+ * why index iterator == FindLeafPage ?? 
+ * why would txn be nullptr ?? 
+ */
+
+
+
+INDEX_TEMPLATE_ARGUMENTS
+B_PLUS_TREE_LEAF_PAGE_TYPE *BPLUSTREE_TYPE::FindLeafPage(const KeyType &key,
+                                                         bool leftMost,
+                                                         Operation op, 
+                                                         Transaction *transaction) {
+  // assert(!EmptyTree());  
+
+  // 1. get b+ root page from disk 
+  auto *root_page = buffer_pool_manager_->FetchPage(root_page_id_); 
+  LatchPage(root_page, op, txn);
+
+
+  // 2. depends if root / internal / leaf,   
+  // recusively hop til found the key in leaf node entry
+  BPlusTreePage* curr_page = reinterpret_cast<BPlusTreePage *>(root_page->GetData());  
+  
+  while(!curr_page->Isleaf()){
+        
+    auto *curr_internal_page = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
+                                               KeyComparator> *>(curr_page);
+
+    if(leftMost){ // traverse to leftmost child
+      page_id_t child_page_id = curr_internal_page->GetValueByIndex(0);
+    }else{
+      page_id_t child_page_id = curr_internal_page->GetValueByKey(key, comparator_);
+    }
+    
+    child_page = buffer_pool_manager_->FetchPage(child_page_id); 
+    LatchPage(child_page, op, txn);
+    
+    curr_page = reinterpret_cast<BPlusTreePage *>(child_page->GetData());
+
+    // KEY !!!!!!
+    // if "safe", unlatch all grand parent pages this txn has latched
+    // == isolate all potential layers that could be affected by split/merge/rebalance
+    // if any child/grandchild still merge/rebalance/split, 
+    // all grandparents will still be latched 
+    if(op==Operation::SEARCH || 
+      (op==Operation::INSERT && curr_page->GetSize() < curr_page->GetMaxSize())|| 
+      (op==Operation::DELETE && curr_page->GetSize() > curr_page->GetMinSize())){
+          
+          // UnLatch(curr_internal_page);
+          // buffer_pool_manager_->UnpinPage(curr_internal_page->GetPageId()); 
+
+          UnLatchUnpinAllParents(child_page, txn, op);
+      }
+  }
+
+  // found leaf page
+  return curr_page;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -99,141 +195,121 @@ bool BPLUSTREE_TYPE::GetValue(const KeyType &key,
  * INSERTION
  *****************************************************************************/
 /*
- * Insert constant key & value pair into b+ tree
- * if current tree is empty, start new tree, update root page id and insert
- * entry, otherwise insert into leaf page.
- * @return: since we only support unique key, if user try to insert duplicate
- * keys return false, otherwise return true.
+ * 
+ * recursion split logic
+// split key == MUST BE 1st element of 2nd leaf
+ * 
+ * 
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value,
                             Transaction *transaction) {
   
-  StartNewTree()
-
-  FindLeafPage()
-
-  auto leaf, leaf2 = InsertIntoLeaf();
-
-
-   
-  // split key == MUST BE 1st element of 2nd leaf
-  InsertIntoParent()
-  
-  
-  return false;
+  // CASE 1: 1st time insert 
+  if(IsBTreeEmpty()){
+    StartNewBPlusTree(key, value);
+    return true;
+    
+  // CASE 2: every other insert 
+  } else {
+    bool success = InsertIntoTree();
+    return success;              
+  }
 }
 
-
-
-
-/*
- * Insert constant key & value pair into an empty tree
- * User needs to first ask for new page from buffer pool manager(NOTICE: throw
- * an "out of memory" exception if returned value is nullptr), then update b+
- * tree's root page id and insert entry directly into leaf page.
- */
+// 1st time insert 
+// no need to latch since new page, diff txn gets diff new page
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::StartNewTree(const KeyType &key, const ValueType &value) {
+void BPLUSTREE_TYPE::StartNewBPlusTree(const KeyType &key, const ValueType &value) {
+  
+  // 1. init root page
+  auto *root_page = buffer_pool_manager_->NewPage(root_page_id_);
+  if (root_page == nullptr) {
+    throw Exception(EXCEPTION_TYPE_INDEX,
+                    "all page are pinned while StartNewTree");
+  }
+  LatchPage(root_page, txn, Operation::INSERT);
 
+  // 2. insert 
+  auto root_leaf_page =
+      reinterpret_cast<BPlusTreeLeafPage<KeyType, ValueType,
+                                         KeyComparator> *>(root_page->GetData());
+  root_leaf_page->Insert(key, value, comparator_);
 
-
-
-
-
-
-
-
-
+  // 3. 
+  UnLatchUnpinPage(root_page, txn, Operation::INSERT);
 }
 
 
 /*
+ * shouldnt FindLeafPage() already all potentially affected page ?? 
  *
- *
+ * each helper == tricky part when insert btree
+ * 1. FindLeafPage()
+ * 2. Split()
+ * 3. InsertIntoParent()
+ * 4. UnLatchUnpinAllParents()
+ * 5. UnLatchUnpinPage()
  * 
 */
 INDEX_TEMPLATE_ARGUMENTS
-bool BPLUSTREE_TYPE::InsertIntoLeaf(const KeyType &key, const ValueType &value,
-                                    Transaction *transaction) {
+bool BPLUSTREE_TYPE::InsertIntoBTree(const KeyType &key, const ValueType &value,
+                                    Transaction *txn) {
 
-  // 1. find the leaf page 
-  auto *leaf_page = FindLeafPage();
+  // 1. find leaf page + latch all "non safe" parents
+  auto *page = FindLeafPage(key, NOT_LEFTMOST, Operation::INSERT, txn);
+  auto leaf_page = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page->GetData());
 
-  // 2. check if key already exists 
-
-
-
-
+  // 2. if key already exists, exit 
+  if (leaf_page->GetValueByKey(key, value, comparator_)){
+    UnLatchUnpinAllParents(leaf_page);
+    UnLatchUnpinPage(leaf_page);
+    return false; // unsuccess 
+  }
 
   // 3. insert {k,v} into leaf page
 
+  // 3.1 if no split (not full)
+  if (leaf_page->GetSize() < leaf_page->GetMaxSize()) { 
+    leaf_page->Insert(key, value, comparator_);
 
-  // 3.1 if still space left 
-  if (leaf->GetSize() < leaf->GetMaxSize()) { 
-    leaf->Insert();
+    return true;
 
 
-
-  // 3.2 if leaf page already full
+  // 3.2 if split (full)
   } else {
-
-    // 3.2.1 
-    auto *leaf, *leaf2 = Split(LEAF_SPLIT)
-    if { // if key smaller than leaf2 first k/v
-      leaf->Insert();
-    } else {
-      leaf2->Insert();
-    }
     
-    // 3.2.2 chain neigbour leaf pages tgt 
-    if { // leaf1 k/v smaller than leaf2 first k/v
-      leaf2->SetNextPageId(leaf->GetNextPageId()); // insert leaf2 in between leaf n leaf1
-      leaf->SetNextPageId(leaf2->GetPageId());
-    } else {
-      leaf2->SetNextPageId(leaf->GetPageId());
+    auto *leaf_page2 = Split(leaf_page);
+    auto mid_key = leaf_page2->GetValueByIndex(0); // (MUST BE)
+    
+    // 3.2.2 insert new page into existing pages chain
+    if (comparator_(leaf_page->GetValueByIndex(0), leaf_page2->GetValueByIndex(0)) < 0) { // leaf1 1st k/v < leaf2 1st k/v
+      // insert leaf2 in between leaf1 n leaf3
+      leaf_page2->SetNextPageId(leaf_page->GetNextPageId()); 
+      leaf_page->SetNextPageId(leaf_page2->GetPageId());
+    } else { // will leaf 2 < leaf ever ??
+      leaf_page2->SetNextPageId(leaf_page->GetPageId());
     }
   }
 
-  return leaf, leaf2 
-  // return false;
-}
-
-
-/*
- * Split input page and return newly created page.
- * Using template N to represent either internal page or leaf page.
- * User needs to first ask for new page from buffer pool manager(NOTICE: throw
- * an "out of memory" exception if returned value is nullptr), then move half
- * of key & value pairs from input page to newly created page
- */
-INDEX_TEMPLATE_ARGUMENTS
-template <typename N> N *BPLUSTREE_TYPE::Split(N *node) { 
+  // copy (not push) 1st key of 2nd half to parent  
+  InsertIntoParent(leaf_page, mid_key, leaf_page2, txn);
   
-  // 1. init new internal page
-
-
-
-  // 2. tranfer half of old -> new page 
-  MoveHalfTo()
-
-
-  return nullptr; 
-
-
+  // decide which page to insert key into     
+  if(comparator_(key, mid_key) < 0){ // if key < leaf2 1st k/v
+    leaf_page->Insert(key, value, comparator_); // auto sort 
+  } else {
+    leaf_page2->Insert(key, value, comparator_);
+  }
+  
+  // wait till all splits done by InsertIntoParent() 
+  // no need to unlatch page by page from down to up after split
+  // no txn can reach lower pages when upper are latched anyway
+  UnLatchUnpinAllParents(leaf_page);
+  UnLatchUnpinPage(leaf_page);
 }
 
-
-
 /*
- * Insert key & value pair into internal page after split
- * @param   old_node      input page from split() method
- * @param   key
- * @param   new_node      returned page from split() method
- * User needs to first find the parent page of old_node, parent node must be
- * adjusted to take info of new_node into account. Remember to deal with split
- * recursively if necessary.
- * 
  * 
  * insert the split key into parent
  * 
@@ -254,9 +330,10 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_child_node,
     
     // 1. init new page for root
     auto *root_page = buffer_pool_manager_->NewPage(ROOT_PAGE_ID);
+    LatchPage(root_page, txn, Operation::INSERT);    
     auto root_internal_page = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t,
                                             KeyComparator> *>(page->root_page());
-
+    
     // 2. new root page register() old, new split leaf page as children
     // 1 to many (1 parent, many kv/children)
     root_internal_page->Init();
@@ -273,6 +350,7 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_child_node,
   } else {
       
     // 1. get 1st page's parent + u() new node's parent
+    // no need to latch == already latched in find leaf
     auto *old_node_parent_page = buffer_pool_manager_->FetchPage(old_child_node->GetParentPageId());
     auto parent_page_bytes = old_node_parent_page->GetData();
     auto old_node_parent_internal_page = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(parent_page_bytes);
@@ -284,15 +362,14 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_child_node,
     if (old_node_parent_internal_page->GetSize() < old_node_parent_internal_page->GetMaxSize()){
 
       // insert 1st key of 2nd page (orphan) into 1st page's existing parent
-      old_node_parent_internal_page.InsertNodeAfter(key);
-      
+      old_node_parent_internal_page.InsertNodeAfter(key);    
 
 
     // 2.2 if full, internal page split 
     } else {
 
       // 1. init new page
-      auto *new_internal_parent_page = buffer_pool_manager_->NewPage();
+      // auto *new_internal_parent_page = buffer_pool_manager_->NewPage();
 
 
       // 2. split == move later half to + u() child + insert key (5) in 1st internal page
@@ -308,7 +385,34 @@ void BPLUSTREE_TYPE::InsertIntoParent(BPlusTreePage *old_child_node,
       // only MoveHalfTo() is u() from leaf to internal version ??
       InsertIntoParent(new_internal_page->GetKeyByIndex(0))
     }
-  }
+    
+    // must unpin after fetch
+    buffer_pool_manager_->UnpinPage(old_node_parent_page->GetPageId(), true);
+  }  
+}
+
+
+/*
+mv 50% of node to new_node
+
+typename N == could be internal or leaf 
+*/
+INDEX_TEMPLATE_ARGUMENTS
+template <typename N> N *BPLUSTREE_TYPE::Split(N *old_page) {
+    
+    // 3.2.1 init new page
+    page_id_t new_page_id;
+    auto new_page = buffer_pool_manager_->NewPage(new_page_id);
+    LatchPage(new_page, txn, Operation::INSERT);    
+    N* new_btree_page = reinterpret_cast<N *>(new_page->GetData());
+    new_btree_page->Init(new_page_id, INVALID_PAGE_ID);
+    
+    
+    // 3.2.2 tranfer half of old -> new page 
+    old_page->MoveHalfTo(new_btree_page, buffer_pool_manager_);
+    split_count_ ++; // why ?? 
+    
+    return new_btree_page;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -400,9 +504,6 @@ get all the nodes n on the path from the root to the leaf containing K
           Adjust keys in the parent node
 
 
-
-
-
 Step 1: Take the input in a key-value and search for the leaf node containing the key value.
 
 Step 2: If the key is found, remove that entry from the leaf
@@ -474,13 +575,14 @@ Step 5: Merging could make a change in the height of the tree.
 
 
 /*
+ * delete 1 kv from btree
+ * (does not affect the same page in disk)
+ * 
  * Delete key & value pair associated with input key
  * If current tree is empty, return immdiately.
  * If not, User needs to first find the right leaf page as deletion target, then
  * delete entry from leaf page. Remember to deal with redistribute or merge if
  * necessary.
- * 
- * 
  * 
  * total cases (12 cases):
  * 
@@ -504,30 +606,61 @@ Step 5: Merging could make a change in the height of the tree.
  * FOUND
  * leaf, coalesce, non-leftmost 
  * 
+ * 1 case == 1 way nodes and edges are u()
  * 
- * 
- * 
+ * Q&A 
+ * why only coalesce gets to delete key in parent ?? 
+ * - leaf level redistribute would have replaced key in parent 
+ * - so no need to delete 
  * 
  */
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
+void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
 
-  // 1. traverse tree, delete leaf key first
-  FindLeafPage()
-  RemoveAndDeleteRecord()
-
-
-  // 2. starting from leaf, recursively delete + 14 cases
-  CoalesceOrRedistribute()
+  // 1. traverse btree, delete leaf key first
+  auto *page = FindLeafPage(key, NOT_LEFTMOST, Operation::DELETE, txn);
+  auto leaf_page = reinterpret_cast<B_PLUS_TREE_LEAF_PAGE_TYPE *>(page->GetData());
+  int size_before_deletion = leaf_page->GetSize();
+  int size_after_deletion = leaf_page->DeleteKeyFromPage(key, comparator_);
   
+  // 2. 
+  // key doesn't exist == do nothing
+  if(size_after_deletion == size_before_deletion){
+    
+    
+  // no need to recurse size == do nothing 
+  } else if (size_after_deletion > leaf_page->GetMinSize()) {
 
 
+  // need to recurse size 
+  } else {
+    
+    
+    
+    // 14 cases
+    // starting from leaf, recursively delete 
+    DeleteKeyFromAllParents(leaf_page);
+
+  }
+
+  // 3. unlatch all parents n leaf (all 3 cases)
+  UnLatchUnpinAllParents(leaf_page);
+  UnLatchUnpinPage(leaf_page);
+
+  // 4. garbage collect all empty merged pages
+  for (auto it = txn->GetDeletedPageSet().begin(); 
+      it < txn->GetDeletedPageSet().end(); ++it){
+    buffer_pool_manager_->DeletePage(*it);
+  }  
 }
 
 /*
- * decides 8 cases, then call its 8 sub functions to heavy lift
- * merge and rebalance w sibling and parent (triangle), then recurse the same up 
+ * KEY FUNCTION
  * 
+ * recursive
+ * start from leaf page at bottom, recurse up to delete every key
+ * - decides 8 cases, then call its 8 sub functions to heavy lift
+ * - merge and rebalance w sibling and parent (triangle), then recurse the same up 
  * 
  * User needs to first find the sibling of input page. 
  * If sibling's size + input page's size > page's max size, then redistribute. 
@@ -543,60 +676,107 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *transaction) {
  * 
  * 
  * 
- * @return: true means target leaf page should be deleted, false means no
- * deletion happens
+ * @return: true == target leaf page deleted
+ * false == no deletion happens
  * 
  * 
- 
+ * 
+ * page == deleted node == you / this 
+ * page == start as leaf, then replaced by parent internal 
+ * 
+ * 
+ * TODO: 
+ * adjust roots
+ * 4 cases if enough space
+ * 
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
-bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
+bool BPLUSTREE_TYPE::DeleteKeyFromAllParents(N *deleted_page, Transaction *transaction) {
   
-  // 0. base condition: reach root page
+  // 0. 2 cases: base condition == reach root page
+  if(deleted_page->IsRoot()){
+    AdjustRoot(deleted_page);
+    return true;
+  }
 
-
-
-  // 1. fetch parent n sibling page 
-  // use parent to get sibling 
+  // 1. fetch parent n sibling page (use parent to get sibling)
+  auto *parent = buffer_pool_manager->FetchPage(deleted_page->GetParentPageId());
+  auto parent_page =
+  reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                      KeyComparator> *>(parent->GetData());
+                                      
   
+  // Q&A: neigbour == right / left sibling ? always left, except if deleted node (page) is leftmost
+  // why ? no reason, just a b+tree protocol everyone follows
+  deleted_node_parent_pos = parent_page->GetIndexByValue(deleted_page->GetPageId());
+  if(deleted_node_parent_pos = 0){ // leftmost
+    sibling_pos = 1; // right sibling
+  } else {
+    sibling_pos = deleted_node_parent_pos - 1; // left sibling
+  }
+  sibling_page_id = parent_page->GetValueByIndex(sibling_pos);
 
-  // 2. 14 cases
-  // 2.1 enough keys -> 4 cases 
+  auto *sibling = buffer_pool_manager->FetchPage(sibling_page_id);
+  auto sibling_page =
+  reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                      KeyComparator> *>(sibling->GetData());
+                                        
+
+  // 2. 10 cases
+  // 2.1 2 cases: page has more than half keys
+  if((deleted_page->GetSize() * 2) > deleted_page->GetMaxSize()){ 
+    
+    // TODO:
+    // delete key in leaf + parent + u() parent w rhs immediate child if key exists in parent
+    // only non leftmost child 1st key == need to recurse to parent
+    // leftmost child or not 1st key == no need to recurse  
+    
+    // never only internal delete == internal's key always exists in leaves (design of this implementation)
+    // resurse to parent of internal ?? 
+    // looks like the official version does not do this == key just left in parent
 
 
+    return true;
   
+  // 2.2 8 cases: page has less than half keys
+  } else {
   
-  
-  // 2.2 not enough keys -> 8 cases 
-  
-  // 2.2.1 if sibling > 50% keys 
-  // 4 cases: leaf, non leaf, lhs, rhs 
-  // leaf vs non leaf auto covered by page.cc 
-  Redistribute()
+    // 2.2.1 if sibling > 50% keys 
+    // 4 cases: leaf, non leaf, lhs, rhs 
+    if((deleted_page->GetSize() + sibling_page->GetSize()) > deleted_page->GetMaxSize()){ 
+      Redistribute<N>(deleted_page, sibling_page, deleted_node_parent_pos);
+      return true;
 
+    // 2.2.2 if sibling < 50% keys 
+    // 4 cases: leaf, non leaf, lhs, rhs 
+    // Q&A: why leftmost ? deleted merges into untouched ? or rhs to lhs ?
+    // parent goes to deleted node, could be either right or left
+    // then rhs merges into left (code seems easier)
+    } else {
+      Coalesce<N>(deleted_page, sibling_page, parent_page, deleted_node_parent_pos, transaction) 
+      if(deleted_node_parent_pos == 0){ // leftmost == no more recurse
+        return true;
+      }
+    }
+  }
 
-  // 2.2.2 if sibling < 50% keys 
-  // 4 cases
-  Coalesces() 
-
-
-
-
-
-  // 2.3 deal w root
-  
-
-
-  // 3. decides whether redistribute or coalesce
-
-
-
-
-  
-  
-  return false;
+  // 4. 
+  // if key exists, delete key + process
+  // if key doesnt exist, stops recursion
+  if(parent_page->KeyExists()){
+    DeleteKeyFromAllParents(parent_page, transaction);
+  } else {
+    return true;
+  }  
+  return false; 
 }
+
+
+
+
+
+
 
 /*
  * deals w 2 cases + recurse 
@@ -605,21 +785,11 @@ bool BPLUSTREE_TYPE::CoalesceOrRedistribute(N *node, Transaction *transaction) {
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
 bool BPLUSTREE_TYPE::Coalesce(
-    N *&neighbor_node, N *&node,
+    N *&deleted_node, N *&untouched_node,
     BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *&parent,
-    int index, Transaction *transaction) {
+    int deleted_node_parent_pos, Transaction *transaction) {
 
-  // 1. merge neighbours  
-  MoveAllTo()
-
-  
-
-
-  // 2. recurse 
-  // u() parent to delete key before recurse
-  Remove()
-
-  CoalesceOrRedistribute()
+  deleted_node->MoveAllTo(untouched_node, deleted_node_parent_pos, buffer_pool_manager_);
 
   return false;
 }
@@ -638,25 +808,30 @@ bool BPLUSTREE_TYPE::Coalesce(
  * @param   node               input from method coalesceOrRedistribute()
  * 
  * 
+ * 
+ * deleted page == recipent 
+ * untouched node == sender
+ * 
  * NOTE:
  * no need to recurse == since no key deleted in parent 
  * hardest part == namespace 
  * u() parent, parent's parent n children's pointer when swapping
+ * not passing in parent page == optimization == unpin parent page as soon as finish
  */
 INDEX_TEMPLATE_ARGUMENTS
 template <typename N>
-void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {
+void BPLUSTREE_TYPE::Redistribute(N *recipient_node, N *sender_node, int recipient_node_parent_pos, int sibling_pos) {
 
+  // 1. if deleted / recipient node on left == lhs <- rhs
+  if(recipient_node_parent_pos == 0){ // recipient on leftmost
+    recipient_node->MoveFirstToEndOf(sender_node, buffer_pool_manager_);
 
-  // 1. if sibling is successor (in your right)
-  // rhs -> lhs
-  MoveFirstToEndOf()
+  } else {
 
-  // 2. if sibling is predecessor
-  // lhs -> rhs
-  MoveLastToFrontOf()
-  
-
+    // 2. if deleted / recipient node on right, lhs -> rhs
+    // node == deleted page == recipent 
+    recipient_node->MoveLastToFrontOf(sender_node, recipient_node_parent_pos, buffer_pool_manager)
+  }
 }
 
 
@@ -664,19 +839,117 @@ void BPLUSTREE_TYPE::Redistribute(N *neighbor_node, N *node, int index) {
 
 /*
  * deal w 2 cases of root 
+ * if root still has > 1 key == CASE: internal/leaf, enough keys
  * 
- * case 1: when you delete the last element in root page, but root page still
- * has one last child
- * case 2: when you delete the last element in whole b+ tree
- * @return : true means root page should be deleted, false means no deletion
- * happend
+ * true == root page deleted
+ * false == no deletion
  * 
- * de
  */
 INDEX_TEMPLATE_ARGUMENTS
 bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
+  
+  
+  // CASE 1: delete the last element in whole b+ tree
+  if (old_root_node->IsLeafPage()) {
+    if(old_root_node->GetSize() == 0){ 
+      root_page_id_ = INVALID_PAGE_ID;
+      UpdateRootPageId(false);
+      return true;
+    }    
+    return false; // root still has at least 1 key (no child)
+  
+  // ?? 
+  // CASE 2: top layer all keys deleted == leftmost child becomes new root
+  // delete the last element in root page, but root still has one last child
+  } else {
+    // why 1 not 0 ? root has key to be deleted in this recursion
+    // NOTE: recursion only happens if parent has key
+    if(old_root_node->GetSize() == 1){ 
+
+      // get leftmost child of root
+      auto old_root_page = reinterpret_cast<BPlusTreeInternalPage<KeyType, page_id_t, KeyComparator> *>(old_root_node);
+      root_page_id_ = old_root_page->GetValueByIndex(0); // global var
+
+      // u() leftmost child to be new root 
+      auto root_leftmost_child = buffer_pool_manager_->FetchPage(root_page_id_);
+      auto root_leftmost_child_page = reinterpret_cast<BPlusTreePage *>(root_leftmost_child->GetData());
+      root_leftmost_child_page->SetParentPageId(INVALID_PAGE_ID);
+      UpdateRootPageId(false); // false == replace instead of insert, u() root page id in "header page"
+
+      buffer_pool_manager_->UnpinPage(root_leftmost_child_id, true);
+
+      assert(root_leftmost_child_id == root_leftmost_child_page->GetPageId());
+      
+      return true;
+    }
+    
+    return false; // root still has at least 2 keys (ye child)
+  }
+
+
+  
+  
   return false;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -693,14 +966,38 @@ bool BPLUSTREE_TYPE::AdjustRoot(BPlusTreePage *old_root_node) {
 
 /*****************************************************************************
  * INDEX ITERATOR
+ * 
+ * 4th API to iterate thru index n leaf page 1 by 1 from left to right
+ * (once reach last index of 1 page, jump on the right neigbour start from 1st index)
+ * (used by testing code)
+ * 
+ * caller to index_iterator class
+ * 
+ * iterator == pointer at vector's item 
+ * 
+ * e.g.
+ * vector::iterator<int> iter = vector<int> vec_int.Begin();
+ * for(iter = vec_int.Begin(); iter < vec_int.End(); iter ++)
+ * cout << *iter
+ * advance(iter, 4) next(iter, 10) prev(iter, 20)
  *****************************************************************************/
 /*
- * Input parameter is void, find the leaftmost leaf page first, then construct
- * index iterator
+ * find the leaftmost leaf page first, then construct
+ * 
  * @return : index iterator
+ * 
+ * REFERENCE: 
+ * TableIterator TableHeap::begin()
  */
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE BPLUSTREE_TYPE::Begin() { return INDEXITERATOR_TYPE(); }
+INDEXITERATOR_TYPE BPLUSTREE_TYPE::Begin() { 
+
+  // index iterator class constructor 
+
+  FindLeafPage(); // leftmost leaf page 
+
+  return INDEXITERATOR_TYPE(); 
+}
 
 /*
  * Input parameter is low key, find the leaf page that contains the input key
@@ -712,70 +1009,209 @@ INDEXITERATOR_TYPE BPLUSTREE_TYPE::Begin(const KeyType &key) {
   return INDEXITERATOR_TYPE();
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 
 /*****************************************************************************
- * UTILITIES AND DEBUG
+ * HELPERS
  *****************************************************************************/
-/*
- * simple traverse b+tree using key
- * 
- * 
- * leftMost == find the left most leaf page
+
+// TODO:
+UnlockUnpinPages();
+
+
+
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::LatchPage(Page* page, Transaction* txn, Operation op){
+    if(op == Operation::SEARCH){
+        page->RLatch();
+    }else{
+        page->WLatch();
+    }
+    if(txn != nullptr) // testing on just btree == no txn 
+        txn->GetPageSet()->push_back(page);
+}
+
+
+/**
+ * how to check if page is latched ?? 
+ * why unpin ?? 
  */
 INDEX_TEMPLATE_ARGUMENTS
-B_PLUS_TREE_LEAF_PAGE_TYPE *BPLUSTREE_TYPE::FindLeafPage(const KeyType &key,
-                                                         bool leftMost) {
-    
-  // 1. set up
-  
-  // 1.1 get b+ root page from disk 
+void BPLUSTREE_TYPE::UnLatchUnpinPage(Page* page, Transaction* txn, Operation op){
+    if(op == Operation::SEARCH){
+        page->RUnLatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
+    }else{
+        page->WUnLatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), true);       
+    }
+    if(txn != nullptr)
+        txn->GetPageSet()->pop_front(page);
+}
 
 
-
-
-  // 2. depends if root / internal / leaf, left to entry is smaller, right bigger
-  // recusively hop til found the key in leaf node entry
-
-
-  // 
-
-
-  
-  
-  return nullptr;
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UnlockPage(Page* page, Transaction* txn, Operation op){
+    if(page->GetPageId() == root_page_id_){
+        UnlockRoot();
+    }
+    if(op == Operation::SEARCH){
+        page->RUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    }else{
+        page->WUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
+    }
+    if(txn != nullptr)
+        txn->GetPageSet()->pop_front();
 }
 
 
 
 
 /*
+ Used while removing element and the target leaf node is deleted 
+ */
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UnlockAllPage(Transaction* txn, Operation op){
+    if(txn == nullptr) return;
+
+    while(!txn->GetPageSet()->empty()){
+
+        auto front = txn->GetPageSet()->front();
+        if(front->GetPageId() != INVALID_PAGE_ID){
+            if(op == Operation::SEARCH){
+                front->RUnlatch();
+                buffer_pool_manager_->UnpinPage(front->GetPageId(), false);
+            }else{
+                if(front->GetPageId() == root_page_id_){
+                    UnlockRoot();
+                }
+                front->WUnlatch(); 
+                buffer_pool_manager_->UnpinPage(front->GetPageId(), true);
+            }
+        }
+        txn->GetPageSet()->pop_front();
+    }
+}
+
+/*
+ If current node is safe, all the lock held by parent can be released
+ Safe condition:
+    Current size < Max Size
+  
+  why so diff to unlatch parent page ?? 
+  parent might not be your immediate parent but great grand parent
+  == since this txn might insert/delete that affects several layers
+ */
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UnlockParentPage(Page* page, Transaction* txn, Operation op){
+    
+    // turn into assert() ?? 
+    if(txn == nullptr) return;
+    if(txn->GetPageSet()->empty()) return;
+
+
+    if(page->GetPageId() == INVALID_PAGE_ID){
+        UnlockAllPage(txn, op);
+    
+    }else{
+        
+        // release 1 by 1, up to down, i.e. greatgrand -> grand -> dad
+        // pageset == all pages a txn has latched, when doing 1 insert/delete
+        while(!txn->GetPageSet()->empty() && 
+              txn->GetPageSet()->front()->GetPageId() 
+              != page->GetPageId()){
+            
+            auto front = txn->GetPageSet()->front();
+
+
+            if(front->GetPageId() != INVALID_PAGE_ID){
+                if(op == Operation::SEARCH){
+                    front->RUnlatch();
+                    buffer_pool_manager_->UnpinPage(front->GetPageId(), false);
+                }else{
+                    if(front->GetPageId() == root_page_id_){
+                        UnlockRoot();
+                    }
+                    front->WUnlatch(); 
+                    buffer_pool_manager_->UnpinPage(front->GetPageId(), true);
+                }
+            }
+
+
+            txn->GetPageSet()->pop_front();
+        }
+    }
+}
+
+
+// 
+/**
+ * TODO: corner cases 
+ * 
+ * release 1 by 1, up to down, i.e. greatgrand -> grand -> dad
+ * pageset == all pages a txn has latched, when doing 1 insert/delete
+ */
+UnLatchUnpinAllParents(Page* child_page, Transaction* txn, Operation op){
+
+  while(!txn->GetPageSet()->IfEmpty() &&
+          txn->GetPageSet()->front()->GetPageId()
+          != child_page->GetPageId()){
+      
+      auto *FIFO_page = txn->GetPageSet()->front();
+      UnLatch(FIFO_page);
+      buffer_pool_manager_->UnpinPage(FIFO_page->GetPageId()); 
+      
+      txn->GetPageSet()->pop_front();
+  }
+
+
+
+}
+
+
+/*
+ * called whenever root_page_id_ is u()
+ * 
  * Update/Insert root page id in header page(where page_id = 0, header_page is
  * defined under include/page/header_page.h)
- * Call this method everytime root page id is changed.
+ * 
  * @parameter: insert_record      defualt value is false. When set to true,
+ * 
  * insert a record <index_name, root_page_id> into header page instead of
  * updating it.
+ * 
+ * insert_record == true/false == replace / insert 
+ * 
+ * TODO: 
+ * index_name_ == ?? 
+ * root_page_id_ == ?? 
+ * when were they u() ??
+ * what is header page for ??
+ * 
  */
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::UpdateRootPageId(int insert_record) {
-  HeaderPage *header_page = static_cast<HeaderPage *>(
-      buffer_pool_manager_->FetchPage(HEADER_PAGE_ID));
-  if (insert_record)
+  
+  HeaderPage *header_page = static_cast<HeaderPage *>(buffer_pool_manager_->FetchPage(HEADER_PAGE_ID));
+  
+  if (insert_record) // insert new 
     // create a new record<index_name + root_page_id> in header_page
     header_page->InsertRecord(index_name_, root_page_id_);
-  else
+  
+  else // replace old 
     // update root_page_id in header_page
     header_page->UpdateRecord(index_name_, root_page_id_);
+  
+  
   buffer_pool_manager_->UnpinPage(HEADER_PAGE_ID, true);
 }
+
+
 
 /*
  * This method is used for debug only
@@ -826,3 +1262,42 @@ template class BPlusTree<GenericKey<32>, RID, GenericComparator<32>>;
 template class BPlusTree<GenericKey<64>, RID, GenericComparator<64>>;
 
 } // namespace cmudb
+
+
+
+
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::UnlockPage(Page* page, Transaction* txn, Operation op){
+    if(page->GetPageId() == root_page_id_){
+        UnlockRoot();
+    }
+    if(op == Operation::SEARCH){
+        page->RUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
+    }else{
+        page->WUnlatch();
+        buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
+    }
+    if(txn != nullptr)
+        txn->GetPageSet()->pop_front();
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
+/*****************************************************************************
+ * FOR DEBUGGING
+`1 *****************************************************************************/
+
+INDEX_TEMPLATE_ARGUMENTS
+bool BPLUSTREE_TYPE::IsEmpty() const {
+    return root_page_id_ == INVALID_PAGE_ID;
+}

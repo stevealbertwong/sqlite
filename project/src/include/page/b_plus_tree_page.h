@@ -44,6 +44,7 @@ public:
   int GetSize() const;
   void SetSize(int size);
   void IncreaseSize(int amount);
+  void DecreaseSize(int amount);
 
   int GetMaxSize() const;
   void SetMaxSize(int max_size);
@@ -57,14 +58,22 @@ public:
 
   void SetLSN(lsn_t lsn = INVALID_LSN);
 
+
+
+
+
+
 private:
-  // member variable, attributes that both internal and leaf page share
-  IndexPageType page_type_;
-  lsn_t lsn_;
-  int size_;
-  int max_size_;
-  page_id_t parent_page_id_;
+  
+  // both internal and leaf page have: 
+
   page_id_t page_id_;
+  IndexPageType page_type_; // internal vs leaf
+  int max_size_;
+  int size_; // num of occupied slots 
+  
+  page_id_t parent_page_id_;
+  lsn_t lsn_; // WAL algo
 };
 
 } // namespace cmudb

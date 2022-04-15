@@ -34,11 +34,8 @@ public:
   int GetRecordCount();
 
 private:
-  /**
-   * helper functions
-   */
   int FindRecord(const std::string &name);
-
   void SetRecordCount(int record_count);
+  
 };
 } // namespace cmudb

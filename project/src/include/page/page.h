@@ -45,12 +45,13 @@ private:
   inline void ResetMemory() { memset(data_, 0, PAGE_SIZE); }
 
 
-  // members
-  char data_[PAGE_SIZE]; // page size of bytes
   page_id_t page_id_ = INVALID_PAGE_ID;
   int pin_count_ = 0;
   bool is_dirty_ = false;
   RWMutex rwlatch_;
+  
+  
+  char data_[PAGE_SIZE]; // page size of bytes
 };
 
 } // namespace cmudb

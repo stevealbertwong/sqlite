@@ -1,12 +1,12 @@
 /**
- * b_plus_tree.h
- *
- * Implementation of simple b+ tree data structure where internal pages direct
- * the search and leaf pages contain actual data.
- * (1) We only support unique key
- * (2) support insert & remove
- * (3) The structure should shrink and grow dynamically
- * (4) Implement index iterator for range scan
+ * @file b_plus_tree.h
+ * @author your name (you@domain.com)
+ * @brief 
+ * @version 0.1
+ * @date 2022-04-15
+ * 
+ * @copyright Copyright (c) 2022
+ * 
  */
 #pragma once
 
@@ -20,6 +20,8 @@
 
 namespace cmudb {
 
+enum class Operation { SEARCH = 0, INSERT, DELETE }; 
+
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
 // Main class providing the API for the Interactive B+ Tree.
 INDEX_TEMPLATE_ARGUMENTS
@@ -31,7 +33,7 @@ public:
                            page_id_t root_page_id = INVALID_PAGE_ID);
 
   // Returns true if this B+ tree has no keys and values.
-  bool IsEmpty() const;
+  bool IsBTreeEmpty() const{ return root_page_id_ == INVALID_PAGE_ID; };
 
   // Insert a key-value pair into this B+ tree.
   bool Insert(const KeyType &key, const ValueType &value,
@@ -58,12 +60,16 @@ public:
   // read data from file and remove one by one
   void RemoveFromFile(const std::string &file_name,
                       Transaction *transaction = nullptr);
-  // expose for test purpose
+  
+  
+  // public for test purpose
   B_PLUS_TREE_LEAF_PAGE_TYPE *FindLeafPage(const KeyType &key,
                                            bool leftMost = false);
 
+
+
 private:
-  void StartNewTree(const KeyType &key, const ValueType &value);
+  void StartNewBPlusTree(const KeyType &key, const ValueType &value);
 
   bool InsertIntoLeaf(const KeyType &key, const ValueType &value,
                       Transaction *transaction = nullptr);
@@ -89,10 +95,16 @@ private:
 
   void UpdateRootPageId(int insert_record = false);
 
-  // member variable
-  std::string index_name_;
-  page_id_t root_page_id_;
+
+
+
+  // this is NOT a page !!! this is algo/ btree manager !!!! 
   BufferPoolManager *buffer_pool_manager_;
+  // not fixed == 1 btree manager handles 1+ btrees == users many primary keys
+  page_id_t root_page_id_; 
+
+
+  std::string index_name_;
   KeyComparator comparator_;
 };
 

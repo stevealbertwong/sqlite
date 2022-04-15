@@ -23,8 +23,14 @@ public:
 
   IndexIterator &operator++();
 
+
+
 private:
-  // add your own private member variables here
+  
+  BufferPoolManager *buffer_pool_manager_; // one and only. here since needs its func
+  BPlusTreeLeafPage<KeyType, ValueType, KeyComparator> *curr_leaf_; // leaf page iterated this round
+  int curr_leaf_index_; // index of leaf page iterated this round
+
 };
 
 } // namespace cmudb

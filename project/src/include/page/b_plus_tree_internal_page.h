@@ -58,6 +58,10 @@ public:
   void QueueUpChildren(std::queue<BPlusTreePage *> *queue,
                        BufferPoolManager *buffer_pool_manager);
 
+
+
+
+
 private:
   void CopyHalfFrom(MappingType *items, int size,
                     BufferPoolManager *buffer_pool_manager);
@@ -69,10 +73,11 @@ private:
                      BufferPoolManager *buffer_pool_manager);
   
   
-  /*
-  MappingType == std::pair<KeyType, ValueType>
-  
+  /*  
+  MappingType == std::pair<KeyType, ValueType>  
   ValueType == page id == pointing at child page
+
+  same as leaf, why here not in b_plus_page.h ?? diff length ??
   */
   MappingType array[0];
 };

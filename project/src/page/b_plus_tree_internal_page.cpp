@@ -1,9 +1,11 @@
 /**
- * class representing internal page node 
- * all funcs specific to internal page
- * 
  * b_plus_tree_internal_page.cpp
  * 
+ * 
+ * key == no.
+ * value == child page id
+ * parent -> child == many children page id
+ * child -> parent == 1 parent page id
  */
 #include <iostream>
 #include <sstream>
@@ -22,9 +24,7 @@ namespace cmudb {
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
 
-/*****************************************************************************
- * getter, setter of kv of internal page 
- *****************************************************************************/
+
 /*
  * init: 
  *
@@ -44,8 +44,13 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(page_id_t page_id,
 
 }
 
-
-
+/*****************************************************************************
+ * edit node's kv and edges of b+tree
+ * 
+ * GetValueByKey() == map[k] -> v 
+ * 
+ * NOTE: internal's 
+ *****************************************************************************/
 INDEX_TEMPLATE_ARGUMENTS
 KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetKeyByIndex(int index) const {
   // replace with your own code
@@ -54,32 +59,24 @@ KeyType B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetKeyByIndex(int index) const {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyByIndex(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyByIndex(int index, const KeyType &key) {
+  
+}
 
 
 INDEX_TEMPLATE_ARGUMENTS
-int B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetIndexByValue(const ValueType &value) const {
+int B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetIndexById(const ValueType &value) const {
   return 0;
 }
 
 
 INDEX_TEMPLATE_ARGUMENTS
-ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetValueByIndex(int index) const { return 0; }
+ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetValueByIndex(int index) const { 
+  return 0; 
+}
 
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-
-/*****************************************************************************
- * LOOKUP
- *****************************************************************************/
 /*
+ * map[k] -> v (but since here is an array)
  * search within internal page which child internal/leaf page 
  * 
  * start w second key(the first key should always be invalid)
@@ -87,12 +84,12 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetValueByIndex(int index) const { ret
  * 
  * key == no. you use to compare traversing down the tree
  * 
- * 
+ * == LookUp()
  * 
  */
 INDEX_TEMPLATE_ARGUMENTS
 ValueType
-B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
+B_PLUS_TREE_INTERNAL_PAGE_TYPE::GetValueByKey(const KeyType &key,
                                        const KeyComparator &comparator) const {
   
   // 1. takes 1st and last 
@@ -108,6 +105,7 @@ B_PLUS_TREE_INTERNAL_PAGE_TYPE::Lookup(const KeyType &key,
   
   return INVALID_PAGE_ID;
 }
+
 
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -192,12 +190,6 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveHalfTo(
 
 }
 
-
-// useless 
-// INDEX_TEMPLATE_ARGUMENTS
-// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyHalfFrom(
-//     MappingType *items, int size, BufferPoolManager *buffer_pool_manager) {}
-
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -250,50 +242,73 @@ ValueType B_PLUS_TREE_INTERNAL_PAGE_TYPE::RemoveAndReturnOnlyChild() {
 /*
  * move all kv from deleted node to untouched node  
  * 
- * recipient == untouched node
- * this == deleted kv node 
+ * parent goes to deleted node, could be either right or left
+ * then rhs merges into left (code seems easier)
  * 
-
+ * 
+ * this == deleted kv node 
+ * recipient == untouched node
+ * 
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveAllTo(
-    BPlusTreeInternalPage *recipient, int index_in_parent,
+    BPlusTreeInternalPage *recipient, int deleted_node_parent_pos,
     BufferPoolManager *buffer_pool_manager) {
   
   // 1. get parent 
+  auto *page = buffer_pool_manager->FetchPage(GetParentPageId());
+  auto parent_page =
+    reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                        KeyComparator> *>(page->GetData());
+  
+  
   // 2. parent move to deleted child 
-  // 3. deleted child move all to untouched child (merge)
+  MappingType parent_first_kv = parent_page->GetKVByIndex(0);
+  int kv_size = static_cast<size_t>(GetSize()*sizeof(MappingType)); 
+  memmove(array[0], parent_first_kv, kv_size);
+  buffer_pool_manager->UnpinPage(GetParentPageId(), true);
+
+
+  // 3. untouched child move all to deleted child (merge)
+  // recipient's array[] -> this's array[] 
+  int recipient_node_size = recipient->GetSize();   
+  int deleted_node_start_pos = GetSize();
+  memmove(recipient->array[0], array[deleted_node_start_pos], recipient_node_size * kv_size);
+
   // 4. u() meta of u and children
+  int num_recipient_children = recipient->GetSize();
+  for (size_t i = 0; i < num_recipient_children; i++){
+    child_page_id = recipient->GetValueByIndex(i);
+  
+    auto *page = buffer_pool_manager->FetchPage(child_page_id);
+    auto child_page =
+      reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                          KeyComparator> *>(page->GetData());
+    child_page->SetParentPageId(GetPageId());
+    buffer_pool_manager->UnpinPage(GetParentPageId(), true);
+  }
+  
+  // each child set to same parent is enough == can use child id to get parent index later
+
 
 }
 
 
 
 
-// INDEX_TEMPLATE_ARGUMENTS
-// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyAllFrom(
-//     MappingType *items, int size, BufferPoolManager *buffer_pool_manager) {}
-
-
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-
 
 /*****************************************************************************
  * REDISTRIBUTE
  *****************************************************************************/
 /*
+ * CASE 1: deleted node on lhs
+ * 
  * move 1st kv from rhs sibling to lhs deleted node + u() meta
  * 
  * hint: graph from https://www.youtube.com/watch?v=YZECPU-3iHs&ab_channel=QandA  
  * 
- * recipient == kv deleted node 
+ * this == untouched node
+ * recipient == deleted node 
  * pair.first == key
  * pair.second == page id pointing to
  * 
@@ -303,79 +318,111 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveFirstToEndOf(
     BPlusTreeInternalPage *recipient,
     BufferPoolManager *buffer_pool_manager) {
 
-  // 1. get rhs sibling's 1st kv n children it points to
+  // 1. get untouched right node's 1st kv n its leftmost child 
+  // MappingType untouched_first_kv = GetKVByIndex(0);
+  leftmost_key = GetKeyByIndex(0);
+  leftmost_child_id = GetValueByIndex(0);
+
+  // delete right node empty space
+  memmove(key_array[0], key_array[1] , GetKeySize() * key_size); // dest, src
+  memmove(value_array[0], value_array[1] , GetValueSize() * value_size); 
+  DecreaseSize(1);
 
 
-
-  // 2. rhs first -> lhs last == triangle rotate 
+  // 2. triangle rotate !!!! (NOT lateral move)
+  // rhs first -> lhs last 
 
   // get parent 
-  
-  // insert parent's key behind lhs delete node's last key
-  
-  // parent's key is replaced by rhs sibling's 1st key
+  auto *page = buffer_pool_manager->FetchPage(GetParentPageId());
+  auto parent_page =
+  reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                      KeyComparator> *>(page->GetData());
 
-  // parent points at what lhs sibling originally points at 
+  // insert parent's key behind lhs delete node's last key
+  // NOTE: child page id still the same 
+  MappingType parent_key = parent_page->GetKeyByValue(leftmost_child_id);  
+  memmove(recipient->key_array[recipient->GetKeySize()], parent_key, key_size);
+  recipient->IncreaseSize(1);
+  
+  // parent's 1st key is replaced by right node's 1st key
+  memmove(parent_page->key_array[GetIndexByKey(parent_key)], leftmost_key, key_size);
+
+  // parent (now at left node) points at what right node's 1st child
+  recipient->value_array.insert(recipient->value_array.end(), leftmost_child_id);
+  buffer_pool_manager->UnpinPage(GetParentPageId(), true);
 
 
   // 3. u() child's meta 
-
-
+  auto *page = buffer_pool_manager->FetchPage(leftmost_child_id);
+  auto child_page =
+    reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                        KeyComparator> *>(page->GetData());
+  child_page->SetParentPageId(GetPageId());
+  buffer_pool_manager->UnpinPage(leftmost_child_id, true);
 }
-
-
-// useless
-// INDEX_TEMPLATE_ARGUMENTS
-// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyLastFrom(
-//     const MappingType &pair, BufferPoolManager *buffer_pool_manager) {}
 
 
 
 /*
- * move last kv from lhs sibling to rhs deleted node + u() meta
+ * CASE 2: delete node on rhs
+ * 
+ * move last kv from left node to rhs deleted node + u() meta
  * hint: graph from https://www.youtube.com/watch?v=YZECPU-3iHs&ab_channel=QandA  
  * 
  * 
- * Remove the last key & value pair from this page to head of "recipient"
- * page, then update relavent key & value pair in its parent page.
- * 
- * 
- * 
+ * this == untouched node == lhs
+ * recipient == deleted node == rhs
  */
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::MoveLastToFrontOf(
     BPlusTreeInternalPage *recipient, int parent_index,
     BufferPoolManager *buffer_pool_manager) {
 
-  // 1. get lhs sibling's last kv n childrent it points to
+  // 1. get untouched lhs node's last kv n its rightmost child 
+  rightmost_key = GetKeyByIndex(GetKeySize());
+  rightmost_child_id = GetValueByIndex(GetValueSize());
+
+  // delete left node empty space at the end
+  key_array[GetKeySize()] = nullptr;
+  value_array[GetValueSize()] = nullptr;
+  DecreaseSize(1);
 
 
+  // 2. triangle rotate !!!! (NOT lateral move)
+  // rhs last -> lhs first
 
-  // 2. lhs last -> rhs first == triangle rotate 
 
   // get parent 
+  auto *page = buffer_pool_manager->FetchPage(GetParentPageId());
+  auto parent_page =
+  reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                      KeyComparator> *>(page->GetData());
+                                      
   
   // insert parent's key in front of rhs's 1st key
-  
+  MappingType parent_key = parent_page->GetKeyByValue(rightmost_child_id);  
+  memmove(recipient->key_array[0], parent_key, key_size);
+  recipient->IncreaseSize(1);
+
+
   // parent's key is replaced by lhs sibling's key
+  memmove(parent_page->key_array[GetIndexByKey(parent_key)], rightmost_key, key_size);
 
   // parent points at what rhs sibling originally points at 
 
+  // parent (now at right node) points at what left node's last child
+  recipient->value_array.insert(recipient->value_array.begin(), rightmost_child_id);
+  buffer_pool_manager->UnpinPage(GetParentPageId(), true);
 
 
   // 3. u() child's meta 
-  
+  auto *page = buffer_pool_manager->FetchPage(leftmost_child_id);
+  auto child_page =
+    reinterpret_cast<BPlusTreeInternalPage<KeyType, decltype(GetPageId()),
+                                        KeyComparator> *>(page->GetData());
+  child_page->SetParentPageId(GetPageId());
+  buffer_pool_manager->UnpinPage(leftmost_child_id, true);
 }
-
-
-// useless
-// INDEX_TEMPLATE_ARGUMENTS
-// void B_PLUS_TREE_INTERNAL_PAGE_TYPE::CopyFirstFrom(
-//     const MappingType &pair, int parent_index,
-//     BufferPoolManager *buffer_pool_manager) {}
-
-
-
 
 
 //////////////////////////////////////////////////////////////////////////////////////////
