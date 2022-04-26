@@ -22,10 +22,23 @@ public:
   void Commit(Transaction *txn);
   void Abort(Transaction *txn);
 
+
+
 private:
   std::atomic<txn_id_t> next_txn_id_;
   LockManager *lock_manager_;
   LogManager *log_manager_;
+
+
+  // 
+  state;
+  slock_set; // got how many slock on rid 
+  xlock_set;
+  rids;
+
+
+
+
 };
 
 } // namespace cmudb

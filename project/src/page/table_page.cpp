@@ -2,7 +2,8 @@
  * header_page.cpp
  * 
  * 
- * write operation + its corresponding complementary operation when UNDO/REDO
+ * write operation + its corresponding operation when UNDO/REDO
+ * CRUB APIs at table level ?? 
  * 
  */
 

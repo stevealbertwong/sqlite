@@ -65,3 +65,5 @@ C++ stuff
 - #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
 - INDEX_TEMPLATE_ARGUMENTS
 - explicit BPlusTree()
+- std::promise<void> go, t1, t2;
+- std::shared_future<void> ready(go.get_future());

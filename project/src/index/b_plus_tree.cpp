@@ -12,7 +12,7 @@
  * 
  * 
  * implementation of 3 APIs:
- * search()
+ * GetValue() / search() 
  * insert()
  * remove()
  * 

@@ -1,5 +1,10 @@
 /**
  * transaction_manager.cpp
+ * 
+ * 
+ * APIs:
+ * 1. commit
+ * 2. abort
  *
  */
 #include "concurrency/transaction_manager.h"
