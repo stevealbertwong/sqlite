@@ -4,6 +4,17 @@
  * Wrapper around actual data page in main memory and also contains bookkeeping
  * information used by buffer pool manager like pin_count/dirty_flag/page_id.
  * Use page as a basic unit within the database system
+ * 
+ * 
+ * 
+ * 
+ *  Table Page Header format (size in byte):
+ *  --------------------------------------------------------------------------
+ * | PageId (4)| LSN (4)| PrevPageId (4)| NextPageId (4)| FreeSpacePointer(4) |
+ *  --------------------------------------------------------------------------
+ *  --------------------------------------------------------------
+ * | TupleCount (4) | Tuple_1 offset (4) | Tuple_1 size (4) | ... |
+ *  --------------------------------------------------------------
  */
 
 #pragma once
@@ -35,6 +46,8 @@ public:
   inline void RLatch() { rwlatch_.RLock(); }
 
   inline lsn_t GetLSN() { return *reinterpret_cast<lsn_t *>(GetData() + 4); }
+  
+  // 2nd 4 bytes of any page == PageLSN
   inline void SetLSN(lsn_t lsn) { memcpy(GetData() + 4, &lsn, 4); }
 
 

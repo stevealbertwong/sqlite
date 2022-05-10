@@ -9,14 +9,8 @@
 
 namespace cmudb {
 
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 TEST(LogManagerTest, BasicLogging) {
   StorageEngine *storage_engine = new StorageEngine("test.db");
@@ -24,6 +18,9 @@ TEST(LogManagerTest, BasicLogging) {
   EXPECT_FALSE(ENABLE_LOGGING);
   LOG_DEBUG("Skip system recovering...");
 
+  
+
+  // 
   storage_engine->log_manager_->RunFlushThread();
   EXPECT_TRUE(ENABLE_LOGGING);
   LOG_DEBUG("System logging thread running...");
@@ -77,22 +74,33 @@ TEST(LogManagerTest, BasicLogging) {
 
 // actually LogRecovery
 TEST(LogManagerTest, RedoTestWithOneTxn) {
+
+
+  // 1. init managers 
   StorageEngine *storage_engine = new StorageEngine("test.db");
+  Transaction *txn = storage_engine->transaction_manager_->Begin();
 
   EXPECT_FALSE(ENABLE_LOGGING);
   LOG_DEBUG("Skip system recovering...");
 
+  // start a seperate flush thread 
   storage_engine->log_manager_->RunFlushThread();
   EXPECT_TRUE(ENABLE_LOGGING);
   LOG_DEBUG("System logging thread running...");
+  
 
+
+  // 2. init table 
   LOG_DEBUG("Create a test table");
-  Transaction *txn = storage_engine->transaction_manager_->Begin();
+  // managers all work for 1 table
   TableHeap *test_table = new TableHeap(storage_engine->buffer_pool_manager_,
                                         storage_engine->lock_manager_,
                                         storage_engine->log_manager_, txn);
   page_id_t first_page_id = test_table->GetFirstPageId();
 
+
+
+  // 3. creates tuple / row / record id under scheme
   std::string createStmt =
       "a varchar, b smallint, c bigint, d bool, e varchar(16)";
   Schema *schema = ParseCreateStatement(createStmt);
@@ -102,8 +110,10 @@ TEST(LogManagerTest, RedoTestWithOneTxn) {
   std::cout << "Tuple: " << tuple.ToString(schema) << "\n";
   Tuple tuple1 = ConstructTuple(schema);
   std::cout << "Tuple1: " << tuple1.ToString(schema) << "\n";
-
   auto val = tuple.GetValue(schema, 4);
+
+
+  // 4. insert tuple into table + commit
   EXPECT_TRUE(test_table->InsertTuple(tuple, rid, txn));
   storage_engine->transaction_manager_->Commit(txn);
   delete txn;
@@ -113,17 +123,26 @@ TEST(LogManagerTest, RedoTestWithOneTxn) {
   LOG_DEBUG("SLEEPING for 2s");
   std::this_thread::sleep_for(std::chrono::seconds(2));
 
+  
+  // 5. crash + restart 
   // shutdown System
   delete storage_engine;
 
   // restart system
   storage_engine = new StorageEngine("test.db");
+
+
+
+  // 6. init log_recovery struct 
   LogRecovery *log_recovery = new LogRecovery(
       storage_engine->disk_manager_, storage_engine->buffer_pool_manager_);
 
   log_recovery->Redo();
   log_recovery->Undo();
 
+  
+  
+  // 
   Tuple old_tuple;
   txn = storage_engine->transaction_manager_->Begin();
   test_table = new TableHeap(storage_engine->buffer_pool_manager_,
@@ -131,6 +150,9 @@ TEST(LogManagerTest, RedoTestWithOneTxn) {
                              storage_engine->log_manager_, first_page_id);
   EXPECT_EQ(test_table->GetTuple(rid, old_tuple, txn), 1);
   storage_engine->transaction_manager_->Commit(txn);
+
+
+  // 
   delete txn;
   delete test_table;
 

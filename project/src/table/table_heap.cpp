@@ -1,5 +1,9 @@
 /**
  * table_heap.cpp
+ * 
+ * 
+ * 
+ * 
  */
 
 #include <cassert>
@@ -43,11 +47,19 @@ TableHeap::TableHeap(BufferPoolManager *buffer_pool_manager,
 //////////////////////////////////////////////////////////////////////////////////////////
 
 bool TableHeap::InsertTuple(const Tuple &tuple, RID &rid, Transaction *txn) {
+  
+  
+  
+  // 0. must be within tuple size 
   if (tuple.size_ + 32 > PAGE_SIZE) { // larger than one page size
     txn->SetState(TransactionState::ABORTED);
     return false;
   }
 
+  
+  // 1. find any page have enough space to insert tuple 
+
+  // 1.1 1st page 
   auto cur_page =
       static_cast<TablePage *>(buffer_pool_manager_->FetchPage(first_page_id_));
   if (cur_page == nullptr) {
@@ -55,17 +67,30 @@ bool TableHeap::InsertTuple(const Tuple &tuple, RID &rid, Transaction *txn) {
     return false;
   }
 
+
   cur_page->WLatch();
+  
+  // if 1st page doesnt have enough space, fetch() its next page
   while (!cur_page->InsertTuple(
       tuple, rid, txn, lock_manager_,
       log_manager_)) { // fail to insert due to not enough space
+    
+    
+    
+    // 1.2 2nd page 
     auto next_page_id = cur_page->GetNextPageId();
+    
+
+    // 2nd page exists, fetch n check if it has enough space 
     if (next_page_id != INVALID_PAGE_ID) { // valid next page
       cur_page->WUnlatch();
       buffer_pool_manager_->UnpinPage(cur_page->GetPageId(), false);
       cur_page = static_cast<TablePage *>(
           buffer_pool_manager_->FetchPage(next_page_id));
       cur_page->WLatch();
+    
+    
+    // 2nd page doesnt exist yet, create new page as next page 
     } else { // create new page
       auto new_page =
           static_cast<TablePage *>(buffer_pool_manager_->NewPage(next_page_id));
@@ -78,6 +103,9 @@ bool TableHeap::InsertTuple(const Tuple &tuple, RID &rid, Transaction *txn) {
       new_page->WLatch();
       // std::cout << "new table page " << next_page_id << " created" <<
       // std::endl;
+
+
+      // new page == next page 
       cur_page->SetNextPageId(next_page_id);
       new_page->Init(next_page_id, PAGE_SIZE, cur_page->GetPageId(),
                      log_manager_, txn);
@@ -86,11 +114,26 @@ bool TableHeap::InsertTuple(const Tuple &tuple, RID &rid, Transaction *txn) {
       cur_page = new_page;
     }
   }
+
+  
   cur_page->WUnlatch();
   buffer_pool_manager_->UnpinPage(cur_page->GetPageId(), true);
+  
+  // 2. for rollback 
   txn->GetWriteSet()->emplace_back(rid, WType::INSERT, Tuple{}, this);
   return true;
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
 
 bool TableHeap::MarkDelete(const RID &rid, Transaction *txn) {
   // todo: remove empty page
@@ -107,6 +150,16 @@ bool TableHeap::MarkDelete(const RID &rid, Transaction *txn) {
   txn->GetWriteSet()->emplace_back(rid, WType::DELETE, Tuple{}, this);
   return true;
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
 
 bool TableHeap::UpdateTuple(const Tuple &tuple, const RID &rid,
                             Transaction *txn) {
@@ -127,6 +180,10 @@ bool TableHeap::UpdateTuple(const Tuple &tuple, const RID &rid,
   return is_updated;
 }
 
+
+
+
+
 void TableHeap::ApplyDelete(const RID &rid, Transaction *txn) {
   auto page = reinterpret_cast<TablePage *>(
       buffer_pool_manager_->FetchPage(rid.GetPageId()));
@@ -137,6 +194,10 @@ void TableHeap::ApplyDelete(const RID &rid, Transaction *txn) {
   page->WUnlatch();
   buffer_pool_manager_->UnpinPage(page->GetPageId(), true);
 }
+
+
+
+
 
 void TableHeap::RollbackDelete(const RID &rid, Transaction *txn) {
   auto page = reinterpret_cast<TablePage *>(
@@ -173,6 +234,8 @@ bool TableHeap::GetTuple(const RID &rid, Tuple &tuple, Transaction *txn) {
   buffer_pool_manager_->UnpinPage(rid.GetPageId(), false);
   return res;
 }
+
+
 
 bool TableHeap::DeleteTableHeap() {
   // todo: real delete

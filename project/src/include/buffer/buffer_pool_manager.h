@@ -36,6 +36,7 @@ private:
   HashTable<page_id_t, Page *> *page_table_; // all pages w content in RAM
   Replacer<Page *> *lru_replacer_;   // lru == only unpinned of all pages 
   std::list<Page *> *free_list_; // all free pages in RAM w/o content == not in lru or page_table 
+  
   std::mutex latch_;             // to protect shared data structure
 };
 } // namespace cmudb

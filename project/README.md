@@ -67,3 +67,6 @@ C++ stuff
 - explicit BPlusTree()
 - std::promise<void> go, t1, t2;
 - std::shared_future<void> ready(go.get_future());
+- class LogRecord {
+  friend class LogManager;
+  friend class LogRecovery;

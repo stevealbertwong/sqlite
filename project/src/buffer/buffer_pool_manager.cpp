@@ -17,6 +17,9 @@ BufferPoolManager::BufferPoolManager(size_t pool_size,
                                      LogManager *log_manager)
     : pool_size_(pool_size), disk_manager_(disk_manager),
       log_manager_(log_manager) {
+  
+
+  // new/malloc/ptr == 1 global var, shared by many
   // a consecutive memory space for buffer pool
   pages_ = new Page[pool_size_];
   page_table_ = new ExtendibleHash<page_id_t, Page *>(BUCKET_SIZE);
@@ -89,6 +92,12 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
       if(page->is_dirty){
         page_id_t dirty_page_id = page->page_id_;
         char *dirty_page_data = page->GetData();
+
+        if(ENABLE_LOGGING){
+          // make sure WAL flushed before dirty page 
+          log_manager->WakeFlushThreadWaitWALFlushed();
+        }
+
         disk_manager_->WritePage(dirty_page_id, dirty_page_data);
       }
 

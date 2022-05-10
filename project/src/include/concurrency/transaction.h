@@ -1,3 +1,15 @@
+/**
+ * @file transaction.h
+ * 
+ * 
+ * @author your name (you@domain.com)
+ * @brief 
+ * @version 0.1
+ * @date 2022-05-08
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 #pragma once
 
 #include <atomic>
@@ -65,10 +77,14 @@ public:
 
   inline txn_id_t GetTransactionId() const { return txn_id_; }
 
+  
+  // for rollback in case txn abort 
   inline std::shared_ptr<std::deque<WriteRecord>> GetWriteSet() {
     return write_set_;
   }
   
+
+  // btree latch 
   inline std::shared_ptr<std::deque<Page *>> GetPageSet() { return page_set_; }
 
   // for latching, register pages this txn touches
@@ -110,8 +126,9 @@ private:
   txn_id_t txn_id_;
   // Below are used by transaction, undo set
   std::shared_ptr<std::deque<WriteRecord>> write_set_;
-  // prev lsn
-  lsn_t prev_lsn_;
+  
+  
+  lsn_t prev_lsn_; // TT latestLSN
 
   
   /* for concurrent index */

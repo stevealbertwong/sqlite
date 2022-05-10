@@ -3,6 +3,10 @@
  * log manager maintain a separate thread that is awaken when the log buffer is
  * full or time out(every X second) to write log buffer's content into disk log
  * file.
+ * 
+ * 
+ * 
+ * 
  */
 
 #pragma once
@@ -32,6 +36,8 @@ public:
     log_buffer_ = nullptr;
     flush_buffer_ = nullptr;
   }
+
+
   // spawn a separate thread to wake up periodically to flush
   void RunFlushThread();
   void StopFlushThread();
@@ -48,26 +54,36 @@ public:
 
 
 
-
+// 4 tables, 5 LSNs are all here ??
 private:
-  // TODO: you may add your own member variables
-  // also remember to change constructor accordingly
 
-  // atomic counter, record the next log sequence number
-  std::atomic<lsn_t> next_lsn_;
+  /* WAL */
+  // LSN, prevLSN, pageID, payload 
+  char *log_buffer_; // WAL in RAM  
+  int log_buffer_size_;
+  std::atomic<lsn_t> next_lsn_; // LSN
+  
+
+
+  /* flush */
   // log records before & include persistent_lsn_ have been written to disk
-  std::atomic<lsn_t> persistent_lsn_;
-  // log buffer related
-  char *log_buffer_;
-  char *flush_buffer_;
-  // latch to protect shared member variables
-  std::mutex latch_;
-  // flush thread
-  std::thread *flush_thread_;
-  // for notifying flush thread
-  std::condition_variable cv_;
-  // disk manager
-  DiskManager *disk_manager_;
+  std::atomic<lsn_t> persistent_lsn_; // flushLSN    
+  char *flush_buffer_; // buffer since IO is slow, while holds lock
+  std::thread *flush_thread_;    
+
+
+  /* lock */
+  // 1+ txns will call 6 funcs, pages can flush/fetch anytime
+  std::mutex lock_WAL_; // protect all vars  
+  
+  // only 1 bg flush thread 
+  // notified by timer + WAL full 
+  std::condition_variable cv_flush_WAL_; 
+  
+
+  
+  DiskManager *disk_manager_; // ?? 
+
 };
 
 } // namespace cmudb

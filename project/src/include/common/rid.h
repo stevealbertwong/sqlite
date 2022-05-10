@@ -1,7 +1,7 @@
 /**
  * rid.h
  * 
- * record id
+ * record id == page id + offset/slot no. 
  */
 
 #pragma once
@@ -12,6 +12,7 @@
 #include "common/config.h"
 
 namespace cmudb {
+
 
 class RID {
 public:

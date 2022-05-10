@@ -154,6 +154,10 @@ void DiskManager::WriteLog(char *log_data, int size) {
   flush_log_ = false;
 }
 
+
+
+
+
 /**
  * Read the contents of the log into the given memory area
  * Always read from the beginning and perform sequence read

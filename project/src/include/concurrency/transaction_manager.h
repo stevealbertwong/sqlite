@@ -30,13 +30,22 @@ private:
   LogManager *log_manager_;
 
 
-  // 
+  // lock manager 
+  // but why these structs ?? 
   state;
   slock_set; // got how many slock on rid 
   xlock_set;
-  rids;
+  record_ids;
 
 
+
+  // log manager 
+  // txn table 
+  // tid, lastLSN, status 
+
+
+
+  
 
 
 };
