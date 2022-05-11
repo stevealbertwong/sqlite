@@ -30,7 +30,8 @@ struct Request {
 };
 
 /**
- * 1 row of a lock table == 3 columns 
+ * 1 row of a lock rquest table 
+ * - 3 columns (granted set, lock mode, wait queue)
  * 
  * 
  * Q&A
@@ -160,6 +161,7 @@ public:
 private:
   // TODO: lock !!!!!!!!
 
+  /* 3 columns of lock request table */
   std::list<Request> granted_set_;  
   std::list<Request> wait_queue_;
   std::list<txn_id_t> upgrade_wait_queue_; // mode must be x
@@ -172,8 +174,7 @@ private:
 
 /**
  * 
- * 
- /
+ */
 class LockManager {
 
 public:

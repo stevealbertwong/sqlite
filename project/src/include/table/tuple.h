@@ -70,24 +70,27 @@ public:
   inline char *GetData() const { return data_; }  
   
 
+  // return RAM addr of col value == ptr + offset 
+  const char *GetDataPtr(Schema *schema, const int column_id) const;
+
+  std::string ToString(Schema *schema) const; // (debug) tuple -> char*
 
 
 
+  /* main funcs */
 
-
-  void SerializeTo(char *storage) const;
-
-  std::string ToString(Schema *schema) const;
+  void SerializeTo(char *storage) const; // tuple -> char*
 
 
 
 
 private:
-  // return RAM addr of col value == ptr + offset 
-  const char *GetDataPtr(Schema *schema, const int column_id) const;
-
+  
+  /* exists in tuple object */
   bool allocated_;
   RID rid_;        // if pointing to the table heap, the rid is valid
+  
+  /* only in char* */
   int32_t size_;
   char *data_;
 };

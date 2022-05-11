@@ -88,7 +88,7 @@ void LogManager::RunFlushThread() {
     cv_flush_WAL_.wait_for(unique_lock_WAL, LOG_TIMEOUT){ // timeout + full WAL
       if(new_log_entries){
         // d() WAL + buffer pool + DPT + u() flushLSN
-        page_flush_update_tables(); // non-blocking == no IO
+        update_tables(); // non-blocking == no IO
       }
     }
 
@@ -105,7 +105,7 @@ void LogManager::RunFlushThread() {
 }
 
 
-void LogManager::page_flush_update_tables() {
+void LogManager::update_tables() {
   
   // d() WAL == swap buffer 
 
@@ -145,9 +145,7 @@ void LogManager::WakeFlushThreadWaitWALFlushed(){
  */
 void LogManager::StopFlushThread() {
 
-
-
-
+  flush_thread_->join();
 
 }
 
@@ -283,7 +281,18 @@ lsn_t LogManager::AppendLogRecord(LogRecord &log_record){
 }
 
 
-log_buffer_to_flush_buffer(){
+/**
+ * @brief 
+ * why swap instead of append ??
+ */
+void log_buffer_to_flush_buffer(){
+  
+  // 1. apeend at end, no flush 
+  memcpy(flush_buffer_ + flush_buffer_size_, log_buffer_, log_buffer_size_);
+
+  // 2. u() log struct
+  flush_buffer_size_ += log_buffer_size_;
+  log_buffer_size_ = 0;
 
 }
 

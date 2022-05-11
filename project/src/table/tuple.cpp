@@ -175,7 +175,7 @@ const char *Tuple::GetDataPtr(Schema *schema, const int column_id) const {
 
 
 
-
+// tuple -> char* (debug only)
 std::string Tuple::ToString(Schema *schema) const {
   std::stringstream os;
 
@@ -202,7 +202,9 @@ std::string Tuple::ToString(Schema *schema) const {
 }
 
 
-// tuple object -> string / char*
+
+
+// tuple -> char*
 void Tuple::SerializeTo(char *storage) const {
   memcpy(storage, &size_, sizeof(int32_t)); // 1st 4 bytes == tuple size
   memcpy(storage + sizeof(int32_t), data_, size_); // all remaining bytes == data/payload

@@ -40,8 +40,9 @@ enum class WType { INSERT = 0, DELETE, UPDATE };
 
 class TableHeap;
 
-// write set record
-class WriteRecord {
+
+
+class WriteRecord { // 
 public:
   WriteRecord(RID rid, WType wtype, const Tuple &tuple, TableHeap *table)
       : rid_(rid), wtype_(wtype), tuple_(tuple), table_(table) {}
@@ -70,42 +71,20 @@ public:
 
   ~Transaction() {}
 
-  //===--------------------------------------------------------------------===//
-  // Mutators and Accessors
-  //===--------------------------------------------------------------------===//
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
+  
+  /* ATT */
   inline std::thread::id GetThreadId() const { return thread_id_; }
-
   inline txn_id_t GetTransactionId() const { return txn_id_; }
-
   
-  // for rollback in case txn abort 
-  inline std::shared_ptr<std::deque<WriteRecord>> GetWriteSet() {
-    return write_set_;
-  }
-  
-
-  // btree latch 
-  inline std::shared_ptr<std::deque<Page *>> GetPageSet() { return page_set_; }
-
-  // for latching, register pages this txn touches
-  inline void AddIntoPageSet(Page *page) { page_set_->push_back(page); }
-
-  inline std::shared_ptr<std::unordered_set<page_id_t>> GetDeletedPageSet() {
-    return deleted_page_set_;
-  }
-
-  inline void AddIntoDeletedPageSet(page_id_t page_id) {
-    deleted_page_set_->insert(page_id);
-  }
-
-  inline std::shared_ptr<std::unordered_set<RID>> GetSharedLockSet() {
-    return shared_lock_set_;
-  }
-
-  inline std::shared_ptr<std::unordered_set<RID>> GetExclusiveLockSet() {
-    return exclusive_lock_set_;
-  }
-
   inline TransactionState GetState() { return state_; }
 
   inline void SetState(TransactionState state) { state_ = state; }
@@ -116,22 +95,67 @@ public:
 
 
 
+  /* ABORT */
+  inline std::shared_ptr<std::deque<WriteRecord>> GetWriteSet() {
+    return write_set_;
+  }
+  
+
+  
+  /* Latch Crabbing - pages this txn touches */
+  inline std::shared_ptr<std::deque<Page *>> GetPageSet() { return page_set_; }
+
+  inline void AddIntoPageSet(Page *page) { page_set_->push_back(page); }
+
+  inline std::shared_ptr<std::unordered_set<page_id_t>> GetDeletedPageSet() {
+    return deleted_page_set_;
+  }
+
+  inline void AddIntoDeletedPageSet(page_id_t page_id) {
+    deleted_page_set_->insert(page_id);
+  }
 
 
+
+  /* 2PL */
+  
+  inline std::shared_ptr<std::unordered_set<RID>> GetSharedLockSet() {
+    return shared_lock_set_;
+  }
+
+  inline std::shared_ptr<std::unordered_set<RID>> GetExclusiveLockSet() {
+    return exclusive_lock_set_;
+  }
+
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////////
+
+
+/**
+ * @brief 
+ * 
+ * why shared ptr ?? why deque ??
+ */
 private:
+
+  /* ATT */
   TransactionState state_;
-  // thread id, single-threaded transactions
-  std::thread::id thread_id_;
-  // transaction id
+  std::thread::id thread_id_;  
   txn_id_t txn_id_;
-  // Below are used by transaction, undo set
-  std::shared_ptr<std::deque<WriteRecord>> write_set_;
-  
-  
   lsn_t prev_lsn_; // TT latestLSN
 
+
+  /* ABORT */
+  std::shared_ptr<std::deque<WriteRecord>> write_set_; //rollback, undo set  
+
   
-  /* for concurrent index */
+  /* Latch Crabbing */
   // for unlatching all latched pages when done insert/delete
   // pageset == for latching, all pages this txn touches
   std::shared_ptr<std::deque<Page *>> page_set_;
@@ -141,7 +165,7 @@ private:
 
 
 
-  /* for lock manager */ 
+  /* 2PL */ 
   // this set contains rid of shared-locked tuples by this transaction
   std::shared_ptr<std::unordered_set<RID>> shared_lock_set_;
   // this set contains rid of exclusive-locked tuples by this transaction

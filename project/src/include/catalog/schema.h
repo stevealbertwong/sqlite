@@ -15,7 +15,7 @@ namespace cmudb {
 class Schema {
 public:
   //===--------------------------------------------------------------------===//
-  // Static factory methods to construct schema objects
+  // constructors
   //===--------------------------------------------------------------------===//
   // Construct schema from vector of Column
   Schema(const std::vector<Column> &columns);
@@ -28,8 +28,11 @@ public:
 
   bool operator!=(const Schema &other) const;
 
+
+
+
   //===--------------------------------------------------------------------===//
-  // Schema accessors
+  // getter
   //===--------------------------------------------------------------------===//
 
   inline int32_t GetOffset(const int column_id) const {
@@ -104,18 +107,26 @@ public:
   // Get a string representation for debugging
   std::string ToString() const;
 
-private:
-  // size of fixed length columns
-  int32_t length;
 
-  // all inlined and uninlined columns in the tuple
-  std::vector<Column> columns;
+
+private:
+
+  /* meta on columns */
+  
+  int32_t length; // size of fixed length columns
 
   // are all columns inlined
   bool tuple_is_inlined;
 
+
+  /* columns */
+
+  // all inlined and uninlined columns in the tuple
+  std::vector<Column> columns;
+
   // keeps track of unlined columns, using logical position(start with 0)
   std::vector<int> uninlined_columns;
+
 
   // keeps track of indexed columns in original table
   // std::vector<int> indexed_columns_;

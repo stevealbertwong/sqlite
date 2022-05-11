@@ -38,23 +38,33 @@ public:
   }
 
 
+  /* major funcs */
   // spawn a separate thread to wake up periodically to flush
+  lsn_t AppendLogRecord(LogRecord &log_record);
   void RunFlushThread();
   void StopFlushThread();
 
-  // append a log record into log buffer
-  lsn_t AppendLogRecord(LogRecord &log_record);
-
-  // get/set helper functions
+  
+  
+  /* getter, setter, helper */
   inline lsn_t GetPersistentLSN() { return persistent_lsn_; }
   inline void SetPersistentLSN(lsn_t lsn) { persistent_lsn_ = lsn; }
   inline char *GetLogBuffer() { return log_buffer_; }
+  
+  void log_buffer_to_flush_buffer();
+  void update_tables();
 
-
-
-
-
-// 4 tables, 5 LSNs are all here ??
+/**
+ * @brief 
+ * 
+ * 5 LSNs are all here ??
+ * - LSN, flushLSN == here
+ * - 
+ * 
+ * 4 tables
+ * TT == txn mananger 
+ * ATT == log recovery 
+ */
 private:
 
   /* WAL */
@@ -67,18 +77,17 @@ private:
 
   /* flush */
   // log records before & include persistent_lsn_ have been written to disk
-  std::atomic<lsn_t> persistent_lsn_; // flushLSN    
+  std::atomic<lsn_t> persistent_lsn_; // flushLSN == WAL LSN in disk
   char *flush_buffer_; // buffer since IO is slow, while holds lock
+  int flush_buffer_size_;
   std::thread *flush_thread_;    
 
 
   /* lock */
   // 1+ txns will call 6 funcs, pages can flush/fetch anytime
   std::mutex lock_WAL_; // protect all vars  
-  
-  // only 1 bg flush thread 
-  // notified by timer + WAL full 
-  std::condition_variable cv_flush_WAL_; 
+  std::promise<void> *promise_; // like cv
+  std::condition_variable cv_flush_WAL_; // only 1 bg flush thread 
   
 
   
