@@ -1,7 +1,9 @@
 /**
  * config.h
- *
- * Database system configuration
+ * - global typedef 
+ * 
+ * 
+ * local typedef == enum class 
  */
 
 #pragma once
@@ -15,6 +17,8 @@ namespace cmudb {
 extern std::chrono::duration<long long int> LOG_TIMEOUT;
 
 extern std::atomic<bool> ENABLE_LOGGING;
+
+
 
 #define INVALID_PAGE_ID -1 // representing an invalid page id
 #define INVALID_TXN_ID -1  // representing an invalid txn id

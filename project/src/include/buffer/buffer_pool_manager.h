@@ -1,5 +1,13 @@
-
-
+/**
+ * @file buffer_pool_manager.h
+ * @author your name (you@domain.com)
+ * @brief 
+ * @version 0.1
+ * @date 2022-05-11
+ * 
+ * @copyright Copyright (c) 2022
+ * 
+ */
 #pragma once
 #include <list>
 #include <mutex>
@@ -27,6 +35,7 @@ public:
   Page *NewPage(page_id_t &page_id);
 
   bool DeletePage(page_id_t page_id);
+
 
 private:
   size_t pool_size_; // number of pages in buffer pool

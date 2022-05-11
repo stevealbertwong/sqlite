@@ -1,6 +1,6 @@
 /**
  * log_manager.cpp
- * 
+ * - for w() log
  * 
  * TODO:
  * - 4 tables: WAL, TT, DPT, Buffer Page
@@ -78,7 +78,7 @@ namespace cmudb {
  * d() DPT 
  * no u() TT 
  */
-void LogManager::RunFlushThread() {
+void LogManager::RunFlushThread() { // flush WAL
 
   while(true){
 
@@ -86,41 +86,35 @@ void LogManager::RunFlushThread() {
         
     // once flush thread gets lock, no txn can u() WAL until timeout/full WAL
     cv_flush_WAL_.wait_for(unique_lock_WAL, LOG_TIMEOUT){ // timeout + full WAL
-      if(new_log_entries){
-        // d() WAL + buffer pool + DPT + u() flushLSN
-        update_tables(); // non-blocking == no IO
+      if(new_log_entries_){        
+        
+        log_buffer_to_flush_buffer(); // non-blocking == no IO
       }
     }
 
-    lock_WAL.unlock();
+    // can append log_buffer during flush_buffer I/O
+    unique_lock_WAL.unlock(); 
 
-    // flush WAL == blocking since IO, run after releasing lock
-    buffer_pool_manager.FlushLog();
+    // flush WAL == blocking since IO
+    disk_manager_.WriteLog(flush_buffer_, flush_buffer_size_);
 
-    if(promise_){
-      promise_.SetValue();
+    if(promise_done_flush_WAL_){
+      promise_done_flush_WAL_.SetValue(); // notify()
     }
 
   }
 }
 
 
-void LogManager::update_tables() {
-  
-  // d() WAL == swap buffer 
 
-  
-  // d() buffer pool + DPT 
-  
-  
-  // u() flushLSN
-
-
-}
-
-
-// make sure WAL flushed before dirty page 
-void LogManager::WakeFlushThreadWaitWALFlushed(){
+/**
+ * @brief 
+ * 
+ * - flush WAL before flushing dirty page (force flush)
+ * - WAL full (cv notify)
+ * - timer (cv notify)
+ */
+void LogManager::ForceFlushWAL(std::shared_future future){
   
   
   // 1. wake up flsuh thread 
@@ -209,7 +203,10 @@ lsn_t LogManager::AppendLogRecord(LogRecord &log_record){
   
   // 2. if WAL is full, wake up flush thread
   if(log_buffer_.GetSize() + log_record.GetSize() >= LOG_BUFFER_SIZE){
+    
+    std::unique_lock<std::mutex> unique_lock_WAL(lock_WAL_);
     log_buffer_to_flush_buffer();
+    
     cv_flush_WAL_.notify_one();
   }
 
@@ -274,10 +271,10 @@ lsn_t LogManager::AppendLogRecord(LogRecord &log_record){
 
 
   // 4. u() WAL
-  log_record.lsn_ = next_lsn_++;
+  log_record.lsn_ += next_lsn_;
+  new_log_entries_ = true;
 
-
-  return log_record.lsn;
+  return log_record.lsn_;
 }
 
 
@@ -290,9 +287,10 @@ void log_buffer_to_flush_buffer(){
   // 1. apeend at end, no flush 
   memcpy(flush_buffer_ + flush_buffer_size_, log_buffer_, log_buffer_size_);
 
-  // 2. u() log struct
+  // 2. u() log manager struct
   flush_buffer_size_ += log_buffer_size_;
   log_buffer_size_ = 0;
+  new_log_entries_ = false;
 
 }
 

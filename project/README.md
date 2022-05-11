@@ -65,6 +65,8 @@ C++ stuff
 - #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
 - INDEX_TEMPLATE_ARGUMENTS
 - explicit BPlusTree()
+- std::atomic
+- std::shared_pointer
 - std::promise<void> go, t1, t2;
 - std::shared_future<void> ready(go.get_future());
 - class LogRecord {

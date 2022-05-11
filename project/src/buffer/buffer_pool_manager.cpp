@@ -1,5 +1,5 @@
 /*
- *
+ * buffer_pool_manager.cpp
  *
  */
 #include "buffer/buffer_pool_manager.h"
@@ -53,7 +53,7 @@ BufferPoolManager::~BufferPoolManager() {
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
 
-// 2 ways to get pages
+/* 2 ways to get pages */
 
 /**
  * find an existing page 
@@ -77,25 +77,34 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   // 2. if not, then find a vacant spot in RAM, then read target page from disk into vacant page
   } else {
     
-    // 2.1 alway try free list first, if not then lru to FIFO swap existing page to disk
+    // 2.1 free list page 
     if(!free_list_->empty()){ // vacant spot from free list
       page = free_list_->front();
-      free_list_.pop_front();
+      free_list_->pop_front();
 
-    
+
+
+    // 2.2 lru to FIFO swap existing page to disk
     }else{ // vacant spot from kicking victim page back to disk
       if(!lru_replacer_->Victim(page)){ // empty page -> victim page 
         return nullptr; // NO ANY vacant spot in RAM !!!!!
       }
 
       // 2.1.1 if lru page is dirty (diff from disk), then flush to u() disk
-      if(page->is_dirty){
+      if(page->is_dirty_){
         page_id_t dirty_page_id = page->page_id_;
         char *dirty_page_data = page->GetData();
 
+                
         if(ENABLE_LOGGING){
-          // make sure WAL flushed before dirty page 
-          log_manager->WakeFlushThreadWaitWALFlushed();
+          // dirty page is recored in WAL already 
+          // WAL must flush before dirty page !!!!
+          
+          // 1. block unti WAL flushed 
+          log_manager_->ForceFlushWAL();
+
+          // 2. init DPT oldestLSN for fetched page 
+
         }
 
         disk_manager_->WritePage(dirty_page_id, dirty_page_data);
@@ -110,8 +119,8 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     // 2.3 r() target page from disk + u() meta of the new page 
     disk_manager_->ReadPage(page_id, page); // fills page->data
     page->pin_count_ = 1;
-    page->is_dirty = false;
-    page->page_id = page_id;
+    page->is_dirty_ = false;
+    page->page_id_ = page_id;
     page_table_->Insert(page_id, page);
 
     return page;
@@ -179,7 +188,7 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
 //////////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////////////////////
 
-// 3 ways to delete pages
+/* 3 ways to delete pages */
 
 /*
  * MUST call after fetch()

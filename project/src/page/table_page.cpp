@@ -169,7 +169,8 @@ bool TablePage::InsertTuple(const Tuple &tuple, RID &rid, Transaction *txn,
     rid.Set(GetPageId(), i); // u() tuple's rid (page_id, slot)
     if (GetTupleSize(i) == 0) { // found empty slot
       
-      if (ENABLE_LOGGING) { // ?? 
+      if (ENABLE_LOGGING) { 
+        // ?? 
         assert(txn->GetSharedLockSet()->find(rid) ==
                    txn->GetSharedLockSet()->end() &&
                txn->GetExclusiveLockSet()->find(rid) ==

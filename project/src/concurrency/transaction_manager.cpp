@@ -1,12 +1,6 @@
 /**
  * transaction_manager.cpp
  * 
- * 
- * APIs:
- * 1. commit
- * 2. abort
- * 
- * 
  * NOTE: 
  * TT latestLSN is in txn.cpp not here 
  * - its not a table, just each txn maintains its own latestLSN
@@ -22,12 +16,20 @@
 namespace cmudb {
 
 
-// init txn
 Transaction *TransactionManager::Begin() {
   Transaction *txn = new Transaction(next_txn_id_++);
 
   if (ENABLE_LOGGING) {
     // TODO: write log and update transaction's prev_lsn here
+    
+
+    // 1. u() START in WAL 
+    LogRecord log_entry(txn->GetTransactionId(), txn->GetPrevLSN(), LogRecordType::BEGIN);
+    auto lsn = log_manager_->AppendLogRecord(log_entry);
+
+    // 2. init TT, latestLSN/prevLSN == lsn, status == running 
+    txn->SetPrevLSN(lsn);
+
   }
 
   return txn;
@@ -113,16 +115,17 @@ void TransactionManager::Commit(Transaction *txn) {
 
     // 3.1 appends "COMMIT" row in WAL in RAM 
     LogRecord log_entry(txn->GetTransactionId(), txn->GetPrevLSN(), 
-              LogRecordType::COMMIT);    
-    auto lsn = log_manager->AppendLogRecord(log_entry);    
-    txn->SetPrevLSN(lsn); // u() TT        
-    SetLSN(lsn); // u() buffer pool PageLSN
+              LogRecordType::COMMIT);
+    // locking implemented within AppendLogRecord()
+    auto lsn = log_manager_->AppendLogRecord(log_entry);    
+    // txn->SetPrevLSN(lsn); // no u() TT latestLSN
 
-    // 3.2 wait for log mngr to flush WAL(RAM) up to commit to disk
+
+    // 3.2 block till flush WAL(RAM) up to commit to disk
+    log_manager_->ForceFlushWAL();
 
     
-    // 3.3 w() <END, txnID> to log 
-    
+    // 3.3 w() <END, txnID> to log     
 
   }
 
@@ -178,19 +181,8 @@ void TransactionManager::Abort(Transaction *txn) {
 
     LogRecord log_entry(txn->GetTransactionId(), txn->GetPrevLSN(), 
               LogRecordType::ABORT);    
-    auto lsn = log_manager->AppendLogRecord(log_entry);    
-    txn->SetPrevLSN(lsn); // u() TT        
-    SetLSN(lsn); // u() buffer pool PageLSN
-
-
-
-    // UNDO ??
-
-
-
-
-
-
+    auto lsn = log_manager->AppendLogRecord(log_entry);                
+    log_manager_->ForceFlushWAL();
 
 
   }

@@ -28,26 +28,6 @@ private:
   std::atomic<txn_id_t> next_txn_id_;
   LockManager *lock_manager_;
   LogManager *log_manager_;
-
-
-  // lock manager 
-  // but why these structs ?? 
-  state;
-  slock_set; // got how many slock on rid 
-  xlock_set;
-  record_ids;
-
-
-
-  // log manager 
-  // txn table 
-  // tid, lastLSN, status 
-
-
-
-  
-
-
 };
 
 } // namespace cmudb
