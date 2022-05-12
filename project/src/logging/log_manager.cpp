@@ -80,51 +80,65 @@ namespace cmudb {
  */
 void LogManager::RunFlushThread() { // flush WAL
 
-  while(true){
+  flush_thread_ = new std::thread([&](){
+    
+    while(true){
+      LOG_INFO("Flush thread starts");
 
-    std::unique_lock<std::mutex> unique_lock_WAL(lock_WAL_);
-        
-    // once flush thread gets lock, no txn can u() WAL until timeout/full WAL
-    cv_flush_WAL_.wait_for(unique_lock_WAL, LOG_TIMEOUT){ // timeout + full WAL
-      if(new_log_entries_){        
-        
-        log_buffer_to_flush_buffer(); // non-blocking == no IO
+      std::unique_lock<std::mutex> unique_lock_WAL(lock_WAL_);
+          
+      // once flush thread gets lock, no txn can u() WAL until timeout/full WAL
+      cv_flush_WAL_.wait_for(unique_lock_WAL, LOG_TIMEOUT) 
+                == std::cv_status::timeout { // timeout + full WAL
+        if(new_log_entries_){        
+          
+          log_buffer_to_flush_buffer(); // non-blocking == no IO
+        }
       }
-    }
 
-    // can append log_buffer during flush_buffer I/O
-    unique_lock_WAL.unlock(); 
+      // can append log_buffer during flush_buffer I/O
+      unique_lock_WAL.unlock(); 
 
-    // flush WAL == blocking since IO
-    disk_manager_.WriteLog(flush_buffer_, flush_buffer_size_);
+      // flush WAL == blocking since IO
+      disk_manager_.WriteLog(flush_buffer_, flush_buffer_size_);      
+      flush_buffer_size_ = 0;
+      SetPersistentLSN(persistent_lsn_);
 
-    if(promise_done_flush_WAL_){
-      promise_done_flush_WAL_.SetValue(); // notify()
-    }
-
+      if(promise_finished_flush_WAL_){
+        promise_finished_flush_WAL_->set_value(); // notify()
+      }
+    }    
   }
+
 }
 
 
 
 /**
  * @brief 
+ * called only by buffer pool manager 
  * 
  * - flush WAL before flushing dirty page (force flush)
  * - WAL full (cv notify)
  * - timer (cv notify)
  */
-void LogManager::ForceFlushWAL(std::shared_future future){
+void LogManager::ForceFlushWAL(std::promise<void> *promise){
   
+  // 1. buffer pool thread + flush WAL thread -> same promise 
+  std::unqiue_lock<std::mutex> lock(lock_WAL_);
+  SetPromise(promise);
+  lock.unlock();
   
-  // 1. wake up flsuh thread 
+  // 2. wake up flsuh thread 
   cv_flush_WAL_.notify_one();
 
   
-  // 2. block until flush thread flushed WAL 
-  future.get();
+  // 3. block until flush thread flushed WAL 
+  promise->get_future().wait();
 
-
+  lock.lock();
+  SetPromise(nullptr);
+  lock.unlock();
 }
 
 
@@ -217,8 +231,7 @@ lsn_t LogManager::AppendLogRecord(LogRecord &log_record){
   log_buffer_size_ += 20;
 
 
-  switch (log_record.log_record_type_)
-  {
+  switch (log_record.log_record_type_){
   case LogRecordType::INSERT:
     // rid, tuple 
     memcpy(log_buffer_ + log_buffer_size_, &log_record.insert_rid_, sizeof(RID));
@@ -291,7 +304,7 @@ void log_buffer_to_flush_buffer(){
   flush_buffer_size_ += log_buffer_size_;
   log_buffer_size_ = 0;
   new_log_entries_ = false;
-
+  persistent_lsn_ = next_lsn_ - 1;
 }
 
 } // namespace cmudb

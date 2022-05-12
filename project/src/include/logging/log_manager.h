@@ -52,7 +52,7 @@ public:
   inline lsn_t GetPersistentLSN() { return persistent_lsn_; }
   inline void SetPersistentLSN(lsn_t lsn) { persistent_lsn_ = lsn; }
   inline char *GetLogBuffer() { return log_buffer_; }
-  
+  inline void SetPromise(std::promise<void> *promise) { promise_finished_flush_WAL_ = promise; }
   
 
 /**
@@ -90,7 +90,7 @@ private:
   // 1+ txns will call 6 funcs, pages can flush/fetch anytime
   std::mutex lock_WAL_; // protect all vars  
   std::condition_variable cv_flush_WAL_; // only 1 bg flush thread 
-  std::promise<void> *promise_done_flush_WAL_; // like cv
+  std::promise<void> *promise_finished_flush_WAL_; // like cv
   
   
 
